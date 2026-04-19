@@ -30,7 +30,7 @@ public class PartServiceImplTest {
         part = new Part(1L, "Part 1", course);
     }
 
-    // UT_CM_047
+    // UT_CM_048
     // Mục tiêu: Lưu Part thành công, đảm bảo gọi đúng repository.save với object truyền vào
     @Test
     public void savePart_Success() {
@@ -40,7 +40,7 @@ public class PartServiceImplTest {
         verifyNoMoreInteractions(partRepository);
     }
 
-    // UT_CM_048
+    // UT_CM_049
     // Mục tiêu: Lưu Part với giá trị null, vẫn gọi repository.save(null) theo hành vi hiện tại
     @Test
     public void savePart_Null() {
@@ -50,7 +50,7 @@ public class PartServiceImplTest {
         verifyNoMoreInteractions(partRepository);
     }
 
-    // UT_CM_049
+    // UT_CM_050
     // Mục tiêu: Lấy danh sách Part theo Course (phân trang), trả về đúng số lượng và tổng bản ghi
     @Test
     public void getPartLisByCourse_Success() {
@@ -74,7 +74,7 @@ public class PartServiceImplTest {
         verifyNoMoreInteractions(partRepository);
     }
 
-    // UT_CM_050
+    // UT_CM_051
     // Mục tiêu: Lấy danh sách Part theo Course khi không có dữ liệu, trả về Page rỗng nhưng không null
     @Test
     public void getPartLisByCourse_Empty() {
@@ -92,7 +92,7 @@ public class PartServiceImplTest {
         verify(partRepository).findAllByCourseId(eq(1L), eq(pageable));
     }
 
-    // UT_CM_051
+    // UT_CM_052
     // Mục tiêu: Lấy danh sách Part theo Course object, trả về đúng dữ liệu và đúng quan hệ Course
     @Test
     public void getPartListByCourse_Success() {
@@ -109,7 +109,7 @@ public class PartServiceImplTest {
         verifyNoMoreInteractions(partRepository);
     }
 
-    // UT_CM_052
+    // UT_CM_053
     // Mục tiêu: Tìm Part theo ID thành công, trả về Optional có dữ liệu
     @Test
     public void findPartById_Found() {
@@ -123,7 +123,7 @@ public class PartServiceImplTest {
         verify(partRepository).findById(1L);
     }
 
-    // UT_CM_053
+    // UT_CM_054
     // Mục tiêu: Tìm Part theo ID không tồn tại, trả về Optional rỗng
     @Test
     public void findPartById_NotFound() {
@@ -136,7 +136,7 @@ public class PartServiceImplTest {
         verify(partRepository).findById(99L);
     }
 
-    // UT_CM_054
+    // UT_CM_055
     // Mục tiêu: Kiểm tra tồn tại Part theo ID trả về true khi tồn tại
     @Test
     public void existsById_True() {
@@ -149,7 +149,7 @@ public class PartServiceImplTest {
         verify(partRepository).existsById(1L);
     }
 
-    // UT_CM_055
+    // UT_CM_056
     // Mục tiêu: Kiểm tra tồn tại Part theo ID trả về false khi không tồn tại
     @Test
     public void existsById_False() {
