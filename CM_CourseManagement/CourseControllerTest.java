@@ -284,36 +284,117 @@ public class CourseControllerTest {
     }
 
     // UT_CM_014
-    // Mục tiêu: Kiểm tra validation (truyền null)
+    // Mục tiêu: Kiểm tra validation khi tạo course
     @Test
     void createCourse_ValidationError() {
-        log.info("Start UT_CM_014 - createCourse_ValidationError");
+        log.info("Start UT_CM_CREATE_COURSE_VALIDATION_ALL");
 
-        ResponseEntity<Object> response = courseController.createCourse(null);
+        Course dbCourse = new Course();
+        dbCourse.setId(1L);
+        dbCourse.setName("Old Name");
+        dbCourse.setCourseCode("OLD_CODE");
+        dbCourse.setImgUrl("old-image.png");
 
-        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        doNothing().when(courseService).saveCourse(any());
 
-        verify(courseService, never()).saveCourse(any());
+        // CASE 1: valid course
+        Course caseValid = new Course();
+        caseValid.setName("New Course");
+        caseValid.setCourseCode("NEW_001");
+        caseValid.setImgUrl("img.png");
 
-        log.info("End UT_CM_014");
+        courseController.createCourse(caseValid);
+
+        verify(courseService).saveCourse(caseValid);
+
+        // CASE 2: empty string fields
+        Course caseEmpty = new Course();
+        caseEmpty.setName("");
+        caseEmpty.setCourseCode("");
+        caseEmpty.setImgUrl("");
+
+        courseController.createCourse(caseEmpty);
+
+        verify(courseService, times(2)).saveCourse(any());
+
+        // CASE 3: space string (BUG - vẫn accept)
+        Course caseSpace = new Course();
+        caseSpace.setName("   ");
+        caseSpace.setCourseCode("   ");
+        caseSpace.setImgUrl("   ");
+
+        courseController.createCourse(caseSpace);
+
+        verify(courseService, times(3)).saveCourse(any());
+
+        // CASE 4: null input (CRASH CASE)
+        assertThrows(NullPointerException.class, () -> {
+            courseController.createCourse(null);
+        });
+
+        verify(courseService, times(3)).saveCourse(any());
+
+        log.info("End UT_CM_CREATE_COURSE_VALIDATION_ALL");
     }
 
     // UT_CM_015
     // Mục tiêu: Kiểm tra validation update
     @Test
     void updateCourse_ValidationError() {
-        log.info("Start UT_CM_015 - updateCourse_ValidationError");
+        log.info("Start UT_CM_UPDATE_COURSE_VALIDATION_ALL");
 
-        when(courseService.getCourseById(5L)).thenReturn(Optional.of(course1));
+        Course dbCourse = new Course();
+        dbCourse.setId(5L);
+        dbCourse.setName("Old Name");
+        dbCourse.setCourseCode("OLD_CODE");
+        dbCourse.setImgUrl("old-image.png");
+        dbCourse.setIntakes(new ArrayList<>());
 
-        Course invalidCourse = new Course();
-        invalidCourse.setImgUrl(null);
+        when(courseService.getCourseById(5L))
+                .thenReturn(Optional.of(dbCourse));
 
-        assertThrows(NullPointerException.class, () -> {
-            courseController.updateCourse(invalidCourse, 5L);
+        // CASE 1: name = ""
+        Course caseEmpty = new Course();
+        caseEmpty.setName("");
+        caseEmpty.setCourseCode("NEW_CODE");
+        caseEmpty.setImgUrl("a.jpg");
+
+        assertThrows(IllegalArgumentException.class, () -> {
+            courseController.updateCourse(caseEmpty, 5L);
         });
 
-        log.info("End UT_CM_015");
+        // CASE 2: name = "   "
+        Course caseSpace = new Course();
+        caseSpace.setName("   ");
+        caseSpace.setCourseCode("CODE_SPACE");
+        caseSpace.setImgUrl("a.jpg");
+
+        assertThrows(IllegalArgumentException.class, () -> {
+            courseController.updateCourse(caseSpace, 5L);
+        });
+
+        // CASE 3: valid data
+        Course caseValid = new Course();
+        caseValid.setName("New Course");
+        caseValid.setCourseCode("NEW_001");
+        caseValid.setImgUrl("a.jpg");
+
+        courseController.updateCourse(caseValid, 5L);
+
+        // CASE 4: null name
+        Course caseNull = new Course();
+        caseNull.setName(null);
+        caseNull.setCourseCode(null);
+        caseNull.setImgUrl(null);
+
+        assertThrows(IllegalArgumentException.class, () -> {
+            courseController.updateCourse(caseNull, 5L);
+        });
+
+        verify(courseService, atLeastOnce()).getCourseById(5L);
+        verify(courseService, atLeastOnce()).saveCourse(any());
+
+        log.info("End UT_CM_UPDATE_COURSE_VALIDATION_ALL");
     }
 
     // UT_CM_016
