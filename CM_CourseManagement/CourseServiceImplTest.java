@@ -27,7 +27,7 @@ public class CourseServiceImplTest {
         course = new Course(1L, "C001", "Course 1", null, new ArrayList<>());
     }
 
-    // UT_CM_032
+    // UT_CM_033
     // Mục tiêu: Kiểm tra lấy course theo ID khi tồn tại
     @Test
     public void getCourseById_Found() {
@@ -42,7 +42,7 @@ public class CourseServiceImplTest {
         verify(courseRepository).findById(1L);
     }
 
-    // UT_CM_033
+    // UT_CM_034
     // Mục tiêu: Kiểm tra lấy course theo ID không tồn tại
     @Test
     public void getCourseById_NotFound() {
@@ -55,7 +55,7 @@ public class CourseServiceImplTest {
         verify(courseRepository).findById(99L);
     }
 
-    // UT_CM_034
+    // UT_CM_035
     // Mục tiêu: Kiểm tra lấy danh sách course có dữ liệu
     @Test
     public void getCourseList_Success() {
@@ -70,7 +70,7 @@ public class CourseServiceImplTest {
         verify(courseRepository).findAll();
     }
 
-    // UT_CM_035
+    // UT_CM_036
     // Mục tiêu: Kiểm tra danh sách course rỗng
     @Test
     public void getCourseList_Empty() {
@@ -84,7 +84,7 @@ public class CourseServiceImplTest {
         verify(courseRepository).findAll();
     }
 
-    // UT_CM_036
+    // UT_CM_037
     // Mục tiêu: Kiểm tra phân trang course
     @Test
     public void getCourseListByPage_Success() {
@@ -108,7 +108,7 @@ public class CourseServiceImplTest {
         verify(courseRepository).findAll(pageable);
     }
 
-      // UT_CM_037
+      // UT_CM_038
     // Mục tiêu: Kiểm tra lưu course thành công
     @Test
     public void saveCourse_Success() {
@@ -117,7 +117,7 @@ public class CourseServiceImplTest {
         verify(courseRepository, times(1)).save(course);
     }
 
-        // UT_CM_038
+        // UT_CM_039
     // Mục tiêu: Kiểm tra xóa course theo ID
     @Test
     public void delete_Success() {
@@ -126,7 +126,7 @@ public class CourseServiceImplTest {
         verify(courseRepository).deleteById(1L);
     }
 
-        // UT_CM_039
+        // UT_CM_040
     // Mục tiêu: Kiểm tra tồn tại courseCode = true
     @Test
     public void existsByCode_True() {
@@ -139,7 +139,7 @@ public class CourseServiceImplTest {
         verify(courseRepository).existsByCourseCode("C001");
     }
 
-    // UT_CM_040
+    // UT_CM_041
     // Mục tiêu: Kiểm tra tồn tại courseCode = false
     @Test
     public void existsByCode_False() {
@@ -152,7 +152,7 @@ public class CourseServiceImplTest {
         verify(courseRepository).existsByCourseCode("X999");
     }
 
-    // UT_CM_041
+    // UT_CM_042
     // Mục tiêu: Kiểm tra existsById = true
     @Test
     public void existsById_True() {
@@ -165,7 +165,7 @@ public class CourseServiceImplTest {
         verify(courseRepository).existsById(1L);
     }
 
-    // UT_CM_042
+    // UT_CM_043
     // Mục tiêu: Kiểm tra existsById = false
     @Test
     public void existsById_False() {
@@ -178,7 +178,7 @@ public class CourseServiceImplTest {
         verify(courseRepository).existsById(99L);
     }
 
-    // UT_CM_043
+    // UT_CM_044
     // Mục tiêu: Kiểm tra findAllByIntakeId có dữ liệu
     @Test
     public void findAllByIntakeId_Found() {
@@ -193,7 +193,7 @@ public class CourseServiceImplTest {
         verify(courseRepository).findAllByIntakeId(1L);
     }
 
-    // UT_CM_044
+    // UT_CM_045
     // Mục tiêu: Kiểm tra findAllByIntakeId rỗng
     @Test
     public void findAllByIntakeId_Empty() {
@@ -208,7 +208,7 @@ public class CourseServiceImplTest {
         verify(courseRepository).findAllByIntakeId(99L);
     }
 
-    // UT_CM_045
+    // UT_CM_046
     // Mục tiêu: Kiểm tra findCourseByPartId có dữ liệu
     @Test
     public void findCourseByPartId_Found() {
@@ -222,7 +222,7 @@ public class CourseServiceImplTest {
         verify(courseRepository).findCourseByPartId(1L);
     }
 
-    // UT_CM_046
+    // UT_CM_047
     // Mục tiêu: Kiểm tra findCourseByPartId không tồn tại
     @Test
     public void findCourseByPartId_NotFound() {
