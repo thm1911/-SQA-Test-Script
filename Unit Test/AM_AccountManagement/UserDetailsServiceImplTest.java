@@ -42,7 +42,7 @@ class UserDetailsServiceImplTest {
         ReflectionTestUtils.setField(userDetailsService, "userRepository", userRepository);
     }
 
-    // Test Case ID: UT_AM_066
+    // Test Case ID: UT_AM_064
     // Tìm kiếm user tồn tại trong hệ thống
     @Test
     void testLoadUserByUsernameWithExistingUser() {
@@ -57,10 +57,10 @@ class UserDetailsServiceImplTest {
         assertTrue(hasAuthority(result.getAuthorities(), "ROLE_STUDENT"));
         verify(userRepository).findByUsername("existingUser");
 
-        log.info("[UT_AM_066] result username={}, authorities={}", result.getUsername(), result.getAuthorities());
+        log.info("[UT_AM_064] result username={}, authorities={}", result.getUsername(), result.getAuthorities());
     }
 
-    // Test Case ID: UT_AM_067
+    // Test Case ID: UT_AM_065
     // Kiểm tra tìm kiếm user theo username không tồn tại
     @Test
     void testLoadUserByUsernameWithNonExistentUser() {
@@ -72,10 +72,10 @@ class UserDetailsServiceImplTest {
         assertEquals("User Not Found with username: missingUser", ex.getMessage());
         verify(userRepository).findByUsername("missingUser");
 
-        log.info("[UT_AM_067] exception={}", ex.getMessage());
+        log.info("[UT_AM_065] exception={}", ex.getMessage());
     }
 
-    // Test Case ID: UT_AM_068
+    // Test Case ID: UT_AM_066
     // Kiểm tra tìm kiếm user với username truyền vào null
     @Test
     void testLoadUserByUsernameWithNullUsername() {
@@ -87,10 +87,10 @@ class UserDetailsServiceImplTest {
         assertEquals("User Not Found with username: null", ex.getMessage());
         verify(userRepository).findByUsername(null);
 
-        log.info("[UT_AM_068] exception={}", ex.getMessage());
+        log.info("[UT_AM_066] exception={}", ex.getMessage());
     }
 
-    // Test Case ID: UT_AM_069
+    // Test Case ID: UT_AM_067
     // Kiểm tra tìm kiếm user với username rỗng
     @Test
     void testLoadUserByUsernameWithEmptyUsername() {
@@ -102,7 +102,7 @@ class UserDetailsServiceImplTest {
         assertEquals("User Not Found with username: ", ex.getMessage());
         verify(userRepository).findByUsername("");
 
-        log.info("[UT_AM_069] exception={}", ex.getMessage());
+        log.info("[UT_AM_067] exception={}", ex.getMessage());
     }
 
     private User createUser(Long id, String username, String email, String password, Set<Role> roles) {

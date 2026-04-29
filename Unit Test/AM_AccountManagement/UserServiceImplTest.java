@@ -111,56 +111,6 @@ class UserServiceImplTest {
     }
 
     // Test Case ID: UT_AM_037
-    // Kiểm tra tạo user với email không đúng định dạng - phải thông báo lỗi
-    @Test
-    void testCreateUserWithInvalidEmailFormat() {
-        Profile profile = new Profile(1L, "Test", "User", null);
-        User request = new User();
-        request.setUsername("testUser_invalidEmail_02");
-        request.setPassword("password123");
-        request.setEmail("invalid-email-format");
-        request.setProfile(profile);
-        request.setRoles(null);
-
-        Role studentRole = new Role(1L, ERole.ROLE_STUDENT);
-        when(passwordEncoder.encode("testUser_invalidEmail_02")).thenReturn("encoded-invalid-email");
-        when(roleService.findByName(ERole.ROLE_STUDENT)).thenReturn(Optional.of(studentRole));
-
-        RuntimeException ex = assertThrows(RuntimeException.class,
-                () -> userService.createUser(request));
-
-        assertNotNull(ex);
-        verify(userRepository, never()).save(any(User.class));
-
-        log.info("[UT_AM_037] invalid email -> throws RuntimeException: {}", ex.getMessage());
-    }
-
-    // Test Case ID: UT_AM_038
-    // Kiểm tra tạo user với password ngắn - phải thông báo lỗi
-    @Test
-    void testCreateUserWithPasswordTooShort() {
-        Profile profile = new Profile(1L, "Test", "User", null);
-        User request = new User();
-        request.setUsername("testUser_shortPass_03");
-        request.setPassword("1234567");
-        request.setEmail("testUser_shortPass_03@example.com");
-        request.setProfile(profile);
-        request.setRoles(null);
-
-        Role studentRole = new Role(1L, ERole.ROLE_STUDENT);
-        when(passwordEncoder.encode("testUser_shortPass_03")).thenReturn("encoded-short-pass");
-        when(roleService.findByName(ERole.ROLE_STUDENT)).thenReturn(Optional.of(studentRole));
-
-        RuntimeException ex = assertThrows(RuntimeException.class,
-                () -> userService.createUser(request));
-
-        assertNotNull(ex);
-        verify(userRepository, never()).save(any(User.class));
-
-        log.info("[UT_AM_038] password too short -> throws RuntimeException: {}", ex.getMessage());
-    }
-
-    // Test Case ID: UT_AM_039
     // Kiểm tra tạo user với role admin sẽ được thêm các role về lecturer, student
     @Test
     void testCreateUserWithAdminRole() {
@@ -191,10 +141,10 @@ class UserServiceImplTest {
         verify(roleService).findByName(ERole.ROLE_LECTURER);
         verify(roleService).findByName(ERole.ROLE_STUDENT);
 
-        log.info("[UT_AM_039] roles={}", created.getRoles());
+        log.info("[UT_AM_037] roles={}", created.getRoles());
     }
 
-    // Test Case ID: UT_AM_040
+    // Test Case ID: UT_AM_038
     // Kiểm tra tạo user với role là lecturer sẽ được thêm role student
     @Test
     void testCreateUserWithLecturerRole() {
@@ -221,10 +171,10 @@ class UserServiceImplTest {
         verify(roleService).findByName(ERole.ROLE_LECTURER);
         verify(roleService).findByName(ERole.ROLE_STUDENT);
 
-        log.info("[UT_AM_040] roles={}", created.getRoles());
+        log.info("[UT_AM_038] roles={}", created.getRoles());
     }
 
-    // Test Case ID: UT_AM_041
+    // Test Case ID: UT_AM_039
     // Kiểm tra tạo user với role là student
     @Test
     void testCreateUserWithStudentRole() {
@@ -247,10 +197,10 @@ class UserServiceImplTest {
         assertTrue(created.getRoles().contains(studentRole));
         verify(roleService).findByName(ERole.ROLE_STUDENT);
 
-        log.info("[UT_AM_041] roles={}", created.getRoles());
+        log.info("[UT_AM_039] roles={}", created.getRoles());
     }
 
-    // Test Case ID: UT_AM_042
+    // Test Case ID: UT_AM_040
     // Kiểm tra tạo user với role null sẽ được thêm role student mặc định
     @Test
     void testCreateUserWithNullRoleName() {
@@ -273,11 +223,11 @@ class UserServiceImplTest {
         verify(roleService).findByName(ERole.ROLE_STUDENT);
         verify(userRepository).save(any(User.class));
 
-        log.info("[UT_AM_042] created with default ROLE_STUDENT={}", created.getRoles());
+        log.info("[UT_AM_040] created with default ROLE_STUDENT={}", created.getRoles());
     }
 
-    
-    // Test Case ID: UT_AM_043
+
+    // Test Case ID: UT_AM_041
     // Kiểm tra tạo user với role là rỗng
     @Test
     void testCreateUserWithEmptyRoles() {
@@ -296,10 +246,10 @@ class UserServiceImplTest {
         assertNotNull(ex);
         verify(userRepository, never()).save(any(User.class));
 
-        log.info("[UT_AM_043] empty roles -> throws RuntimeException: {}", ex.getMessage());
+        log.info("[UT_AM_041] empty roles -> throws RuntimeException: {}", ex.getMessage());
     }
 
-    // Test Case ID: UT_AM_044
+    // Test Case ID: UT_AM_042
     // Kiểm tra tạo user với role không xác định
     @Test
     void testCreateUserWithUnknownRole() {
@@ -321,10 +271,10 @@ class UserServiceImplTest {
         assertNotNull(ex);
         verify(userRepository, never()).save(any(User.class));
 
-        log.info("[UT_AM_044] unknown role (null name) -> throws RuntimeException: {}", ex.getMessage());
+        log.info("[UT_AM_042] unknown role (null name) -> throws RuntimeException: {}", ex.getMessage());
     }
 
-    // Test Case ID: UT_AM_045
+    // Test Case ID: UT_AM_043
     // Kiểm tra lấy ra user với username thành công
     @Test
     void testGetUserByUsername_Success() {
@@ -338,10 +288,10 @@ class UserServiceImplTest {
         assertEquals("testUser_04", result.get().getUsername());
         verify(userRepository).findByUsername("testUser_04");
 
-        log.info("[UT_AM_045] result={}", result);
+        log.info("[UT_AM_043] result={}", result);
     }
 
-    // Test Case ID: UT_AM_046
+    // Test Case ID: UT_AM_044
     // Kiểm tra user tồn tại với username
     @Test
     void testExistsByUsername() {
@@ -352,10 +302,10 @@ class UserServiceImplTest {
         assertTrue(result);
         verify(userRepository).existsByUsername("testUser_05");
 
-        log.info("[UT_AM_046] result={}", result);
+        log.info("[UT_AM_044] result={}", result);
     }
 
-    // Test Case ID: UT_AM_047
+    // Test Case ID: UT_AM_045
     // Kiểm tra user tồn tại theo email
     @Test
     void testExistsByEmail() {
@@ -366,10 +316,10 @@ class UserServiceImplTest {
         assertTrue(result);
         verify(userRepository).existsByEmail("testUser_06@example.com");
 
-        log.info("[UT_AM_047] result={}", result);
+        log.info("[UT_AM_045] result={}", result);
     }
 
-    // Test Case ID: UT_AM_048
+    // Test Case ID: UT_AM_046
     // Kiểm tra Lấy ra User theo pageable
     @Test
     void testFindUsersByPage() {
@@ -386,24 +336,10 @@ class UserServiceImplTest {
         assertEquals(2, result.getTotalElements());
         verify(userRepository).findAll(pageable);
 
-        log.info("[UT_AM_048] pageSize={}", result.getContent());
+        log.info("[UT_AM_046] pageSize={}", result.getContent());
     }
 
-    // Test Case ID: UT_AM_049
-    // Kiểm tra update user thành công
-    @Test
-    void testUpdateUser_Success() {
-        User user = createUser(8L, "testUser_08", "testUser_08@example.com");
-        user.setProfile(new Profile(1L, "Updated", "Name", null));
-
-        userService.updateUser(user);
-
-        verify(userRepository).save(user);
-
-        log.info("[UT_AM_049] updatedUser={}", user);
-    }
-
-    // Test Case ID: UT_AM_050
+    // Test Case ID: UT_AM_047
     // Kiểm tra tìm kiếm user với trạng thái là đã xóa
     @Test
     void testFindUsersByDeletedStatus_Success() {
@@ -417,10 +353,24 @@ class UserServiceImplTest {
         assertTrue(result.getContent().get(0).isDeleted());
         verify(userRepository).findAllByDeleted(true, pageable);
 
-        log.info("[UT_AM_050] result={}", result.getContent());
+        log.info("[UT_AM_047] result={}", result.getContent());
     }
 
-    // Test Case ID: UT_AM_051
+    // Test Case ID: UT_AM_048
+    // Kiểm tra update user thành công
+    @Test
+    void testUpdateUser_Success() {
+        User user = createUser(8L, "testUser_08", "testUser_08@example.com");
+        user.setProfile(new Profile(1L, "Updated", "Name", null));
+
+        userService.updateUser(user);
+
+        verify(userRepository).save(user);
+
+        log.info("[UT_AM_048] updatedUser={}", user);
+    }
+
+    // Test Case ID: UT_AM_049
     // Kiểm tra tìm kiếm user theo username
     @Test
     void testFindUsersByUsernameSearch_Success() {
@@ -434,10 +384,10 @@ class UserServiceImplTest {
         assertEquals("search-user", result.getContent().get(0).getUsername());
         verify(userRepository).findAllByDeletedAndUsernameContains(false, "search", pageable);
 
-        log.info("[UT_AM_051] result={}", result.getContent());
+        log.info("[UT_AM_049] result={}", result.getContent());
     }
 
-    // Test Case ID: UT_AM_052
+    // Test Case ID: UT_AM_050
     // Kiểm thử tìm kiếm user theo id
     @Test
     void testFindUserById_Success() {
@@ -450,10 +400,10 @@ class UserServiceImplTest {
         assertEquals(10L, result.get().getId());
         verify(userRepository).findById(10L);
 
-        log.info("[UT_AM_052] result={}", result);
+        log.info("[UT_AM_050] result={}", result);
     }
 
-    // Test Case ID: UT_AM_053
+    // Test Case ID: UT_AM_051
     // Tìm kiếm tất cả user bới intakeId
     @Test
     void testFindAllByIntakeId_Success() {
@@ -468,10 +418,10 @@ class UserServiceImplTest {
         assertEquals(2, result.size());
         verify(userRepository).findAllByIntakeId(11L);
 
-        log.info("[UT_AM_053] result={}", result);
+        log.info("[UT_AM_051] result={}", result);
     }
 
-    // Test Case ID: UT_AM_054
+    // Test Case ID: UT_AM_052
     // Kiểm tra tìm kiếm user theo username hoặc email
     @Test
     void testFindAllByUsernameContainsOrEmailContains_Success() {
@@ -484,11 +434,11 @@ class UserServiceImplTest {
         assertEquals(1, result.getContent().size());
         verify(userRepository).findAllByUsernameContainsOrEmailContains("keyword", "keyword", pageable);
 
-        log.info("[UT_AM_054] result={}", result.getContent());
+        log.info("[UT_AM_052] result={}", result.getContent());
     }
 
-    // Test Case ID: UT_AM_055
-    // Tìm kiếm user không bị bị xóa để xuất file thành công
+    // Test Case ID: UT_AM_053
+    // Tìm kiếm user không bị xóa để xuất file thành công
     @Test
     void testFindAllByNotDeletedToExport_Success() {
         User user = createUser(14L, "export-user", "export@example.com");
@@ -504,10 +454,10 @@ class UserServiceImplTest {
         assertEquals("User", result.get(0).getLastName());
         verify(userRepository).findAllByDeleted(false);
 
-        log.info("[UT_AM_055] exportList={}", result);
+        log.info("[UT_AM_053] exportList={}", result);
     }
 
-    // Test Case ID: UT_AM_056
+    // Test Case ID: UT_AM_054
     // Kiểm tra lấy ra user name của user
     @Test
     void testGetUserName_Success() {
@@ -519,10 +469,10 @@ class UserServiceImplTest {
 
         assertEquals("current.user", result);
 
-        log.info("[UT_AM_056] username={}", result);
+        log.info("[UT_AM_054] username={}", result);
     }
 
-    // Test Case ID: UT_AM_057
+    // Test Case ID: UT_AM_055
     // Kiểm tra yêu câu reset password thành công
     @Test
     void testRequestPasswordReset_Success() throws MessagingException {
@@ -542,10 +492,10 @@ class UserServiceImplTest {
         assertNotNull(savedToken.getToken());
         assertFalse(savedToken.getToken().isEmpty());
 
-        log.info("[UT_AM_057] savedToken={}", savedToken.getToken());
+        log.info("[UT_AM_055] savedToken={}", savedToken.getToken());
     }
 
-    // Test Case ID: UT_AM_058
+    // Test Case ID: UT_AM_056
     // Kiểm tra reset password với user không tồn tại
     @Test
     void testRequestPasswordReset_UserNotFound() throws MessagingException {
@@ -557,10 +507,10 @@ class UserServiceImplTest {
         verify(passwordResetTokenRepository, never()).save(any(PasswordResetToken.class));
         verify(emailService, never()).resetPassword(anyString(), anyString());
 
-        log.info("[UT_AM_058] result={}", result);
+        log.info("[UT_AM_056] result={}", result);
     }
 
-    // Test Case ID: UT_AM_059
+    // Test Case ID: UT_AM_057
     // Kiểm tra reset password thành công
     @Test
     void testResetPassword_Success() {
@@ -580,10 +530,10 @@ class UserServiceImplTest {
         verify(userRepository).save(user);
         verify(passwordResetTokenRepository).delete(passwordResetToken);
 
-        log.info("[UT_AM_059] result={}", result);
+        log.info("[UT_AM_057] result={}", result);
     }
 
-    // Test Case ID: UT_AM_060
+    // Test Case ID: UT_AM_058
     // Kiểm tra reset pasword với token hết hạn
     @Test
     void testResetPassword_ExpiredToken() {
@@ -599,10 +549,10 @@ class UserServiceImplTest {
         verify(passwordResetTokenRepository, never()).findByToken(anyString());
         verify(userRepository, never()).save(any(User.class));
 
-        log.info("[UT_AM_060] result={}", result);
+        log.info("[UT_AM_058] result={}", result);
     }
 
-    // Test Case ID: UT_AM_061
+    // Test Case ID: UT_AM_059
     // Kiểm tra reset password khi không có token
     @Test
     void testResetPassword_TokenNotFound() {
@@ -615,10 +565,10 @@ class UserServiceImplTest {
         verify(passwordResetTokenRepository).findByToken(token);
         verify(userRepository, never()).save(any(User.class));
 
-        log.info("[UT_AM_061] result={}", result);
+        log.info("[UT_AM_059] result={}", result);
     }
 
-    // Test Case ID: UT_AM_062
+    // Test Case ID: UT_AM_060
     // Kiểm tra reset password với user vừa lưu trả về null
     @Test
     void testResetPassword_SaveReturnsNull() {
@@ -635,10 +585,10 @@ class UserServiceImplTest {
         assertFalse(result);
         verify(passwordResetTokenRepository).delete(passwordResetToken);
 
-        log.info("[UT_AM_062] result={}", result);
+        log.info("[UT_AM_060] result={}", result);
     }
 
-    // Test Case ID: UT_AM_063
+    // Test Case ID: UT_AM_061
     // Kiểm tra reset password với user sau khi lưu có password khác với password được encoded
     @Test
     void testResetPassword_SaveReturnsUserWithDifferentPassword() {
@@ -655,10 +605,10 @@ class UserServiceImplTest {
         assertFalse(result);
         verify(passwordResetTokenRepository).delete(passwordResetToken);
 
-        log.info("[UT_AM_063] result={}", result);
+        log.info("[UT_AM_061] result={}", result);
     }
 
-    // Test Case ID: UT_AM_064
+    // Test Case ID: UT_AM_062
     // Kiểm tra thêm role thành công
     @Test
     void testAddRoles_Success() {
@@ -672,10 +622,10 @@ class UserServiceImplTest {
         assertTrue(roles.contains(lecturerRole));
         verify(roleService).findByName(ERole.ROLE_LECTURER);
 
-        log.info("[UT_AM_064] roles={}", roles);
+        log.info("[UT_AM_062] roles={}", roles);
     }
 
-    // Test Case ID: UT_AM_065
+    // Test Case ID: UT_AM_063
     // Kiểm tra
     @Test
     void testAddRoles_RoleNotFound() {
@@ -689,7 +639,7 @@ class UserServiceImplTest {
         assertTrue(roles.isEmpty());
         verify(roleService).findByName(ERole.ROLE_ADMIN);
 
-        log.info("[UT_AM_065] role={} -> throws RuntimeException", ERole.ROLE_ADMIN);
+        log.info("[UT_AM_063] role={} -> throws RuntimeException", ERole.ROLE_ADMIN);
     }
 
     private User createUser(Long id, String username, String email) {

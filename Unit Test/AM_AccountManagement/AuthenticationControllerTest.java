@@ -45,9 +45,10 @@ class AuthenticationControllerTest {
     }
 
     // Test Case ID: UT_AM_001
-    // Returns 200 OK; JwtResponse with JWT token and user details; userService.updateUser called once
+    // Thực hiện đăng nhập thành công, không check DB do không có thay đổi
     @Test
     void testAuthenticateUserSuccess() {
+        // Mock data đăng nhập
         String username = "testuser";
         String password = "123";
         String jwt = "jwt-token";
@@ -56,6 +57,7 @@ class AuthenticationControllerTest {
         login.setUsername(username);
         login.setPassword(password);
 
+        //Tạo user mock data
         User user = new User();
         user.setUsername(username);
         user.setEmail("test@example.com");
@@ -63,6 +65,8 @@ class AuthenticationControllerTest {
 
         when(userService.getUserByUsername(username)).thenReturn(Optional.of(user));
 
+
+        //Sử dụng UserDetails set vào Authentication
         UserDetailsImpl principal = new UserDetailsImpl(
                 1L,
                 username,
@@ -105,9 +109,10 @@ class AuthenticationControllerTest {
     }
 
     // Test Case ID: UT_AM_002
-    // Returns 400 Bad Request
+    // Kiểm tra hàm authenticateUser() với user không tồn tại
     @Test
     void testAuthenticateUserNotFound() {
+        //Mock data
         String username = "notfound";
 
         LoginUser login = new LoginUser();
@@ -128,7 +133,7 @@ class AuthenticationControllerTest {
     }
 
     // Test Case ID: UT_AM_003
-    // Returns 400 Bad Request
+    // Kiểm tra hàm authenticateUser() với user đã bị xóa mềm
     @Test
     void testAuthenticateUserDeleted() {
         String username = "deleted";
@@ -155,7 +160,7 @@ class AuthenticationControllerTest {
     }
 
     // Test Case ID: UT_AM_004
-    // Returns 400 Bad Request when user becomes deleted in the post-authentication lookup
+    // Kiểm tra user sau xác thực nhưng chưa hoàn thành hàm authenticate thì bị xóa
     @Test
     void testAuthenticateUserDeletedAfterAuthentication() {
         String username = "testuser";
@@ -203,11 +208,11 @@ class AuthenticationControllerTest {
         verify(authenticationManager).authenticate(any());
         verify(jwtUtils).generateJwtToken(authentication);
 
-        logger.info("[UT_AM_008] HTTP Status: {}", response.getStatusCodeValue());
+        logger.info("[UT_AM_004] HTTP Status: {}", response.getStatusCodeValue());
     }
 
     // Test Case ID: UT_AM_005
-    // Returns OperationStatusDto with operationName=REQUEST_PASSWORD_RESET, operationResult=SUCCESS; service called once
+    // Kiểm tra yêu cầu reset password thành công
     @Test
     void testPasswordResetRequestSuccess() throws Exception {
         String email = "test@gmail.com";
@@ -224,11 +229,11 @@ class AuthenticationControllerTest {
 
         verify(userService).requestPasswordReset(email);
 
-        logger.info("[UT_AM_004] response={}", response);
+        logger.info("[UT_AM_005] response={}", response);
     }
 
     // Test Case ID: UT_AM_006
-    // Returns OperationStatusDto with operationName=PASSWORD_RESET, operationResult=SUCCESS; service called once
+    // Kiểm tra reset password thành công
     @Test
     void testPasswordResetSuccess() {
         String token = "valid-token";
@@ -247,11 +252,11 @@ class AuthenticationControllerTest {
 
         verify(userService).resetPassword(token, password);
 
-        logger.info("[UT_AM_005] response={}", response);
+        logger.info("[UT_AM_006] response={}", response);
     }
 
     // Test Case ID: UT_AM_007
-    // Returns OperationStatusDto with operationName=REQUEST_PASSWORD_RESET, operationResult=ERROR; service called once
+    // Kiểm tra yêu cầu reset password thất bại khi nhập email không đúng
     @Test
     void testPasswordResetRequestFail() throws Exception {
         String email = "unknown@gmail.com";
@@ -268,11 +273,11 @@ class AuthenticationControllerTest {
 
         verify(userService).requestPasswordReset(email);
 
-        logger.info("[UT_AM_006] response={}", response);
+        logger.info("[UT_AM_007] response={}", response);
     }
 
     // Test Case ID: UT_AM_008
-    // Returns OperationStatusDto with operationName=PASSWORD_RESET, operationResult=ERROR; service called once
+    // Kiểm tra reset password thất bại khi nhập vào token không hợp lệ
     @Test
     void testPasswordResetFail() {
         String token = "invalid";
@@ -291,6 +296,6 @@ class AuthenticationControllerTest {
 
         verify(userService).resetPassword(token, password);
 
-        logger.info("[UT_AM_007] response={}", response);
+        logger.info("[UT_AM_008] response={}", response);
     }
 }

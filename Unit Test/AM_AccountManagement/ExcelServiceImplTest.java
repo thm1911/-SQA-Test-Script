@@ -29,10 +29,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -85,7 +82,7 @@ class ExcelServiceImplTest {
         }
     }
 
-    // Test Case ID: UT_AM_080
+    // Test Case ID: UT_AM_078
     // Kiem thu doc file xlsx va gan role STUDENT mac dinh
     @Test
     void testReadUserFromExcelFile_readsRowAndMapsDefaultStudentRole() throws IOException {
@@ -121,10 +118,10 @@ class ExcelServiceImplTest {
         verify(intakeService).findByCode("INT-01");
         verify(roleService).findByName(ERole.ROLE_STUDENT);
 
-        log.info("[UT_AM_080] users={}", users);
+        log.info("[UT_AM_078] users={}", users);
     }
 
-    // Test Case ID: UT_AM_081
+    // Test Case ID: UT_AM_079
     // Kiem thu doc file xlsx va gan role ADMIN khi co cot role
     @Test
     void testReadUserFromExcelFile_usesAdminRole() throws IOException {
@@ -149,10 +146,10 @@ class ExcelServiceImplTest {
         assertEquals(Collections.singleton(adminRole), users.get(0).getRoles());
         verify(roleService).findByName(ERole.ROLE_ADMIN);
 
-        log.info("[UT_AM_081] users={}", users);
+        log.info("[UT_AM_079] users={}", users);
     }
 
-    // Test Case ID: UT_AM_082
+    // Test Case ID: UT_AM_080
     // Kiem thu doc file xls va gan role LECTURER
     @Test
     void testReadUserFromExcelFile_readsXlsAndMapsLecturerRole() throws IOException {
@@ -177,10 +174,10 @@ class ExcelServiceImplTest {
         assertEquals(Collections.singleton(lecturerRole), users.get(0).getRoles());
         verify(roleService).findByName(ERole.ROLE_LECTURER);
 
-        log.info("[UT_AM_082] users={}", users);
+        log.info("[UT_AM_080] users={}", users);
     }
 
-    // Test Case ID: UT_AM_083
+    // Test Case ID: UT_AM_081
     // Kiem thu nem loi khi role khong ton tai
     @Test
     void testReadUserFromExcelFile_RoleIsMissing() throws IOException {
@@ -202,10 +199,10 @@ class ExcelServiceImplTest {
 
         assertEquals("Error: Role is not found", ex.getMessage());
 
-        log.info("[UT_AM_083] exception={}", ex.getMessage());
+        log.info("[UT_AM_081] exception={}", ex.getMessage());
     }
 
-    // Test Case ID: UT_AM_084
+    // Test Case ID: UT_AM_082
     // Kiem thu tu choi file khong dung dinh dang excel
     @Test
     void testReadUserFromExcelFile_rejectsNonExcelExtension() throws IOException {
@@ -218,10 +215,10 @@ class ExcelServiceImplTest {
 
         assertEquals("The specified file is not Excel file", ex.getMessage());
 
-        log.info("[UT_AM_084] exception={}", ex.getMessage());
+        log.info("[UT_AM_082] exception={}", ex.getMessage());
     }
 
-    // Test Case ID: UT_AM_085
+    // Test Case ID: UT_AM_083
     // Kiem thu nem ClassCastException khi username la boolean
     @Test
     void testReadUserFromExcelFile_UsernameIsBoolean() throws IOException {
@@ -237,10 +234,10 @@ class ExcelServiceImplTest {
                 () -> excelService.readUserFromExcelFile(excelFile.toString())
         );
 
-        log.info("[UT_AM_085] exception={}", ex.getClass().getSimpleName());
+        log.info("[UT_AM_083] exception={}", ex.getClass().getSimpleName());
     }
 
-    // Test Case ID: UT_AM_086
+    // Test Case ID: UT_AM_084
     // Kiem thu nem ClassCastException khi username la so
     @Test
     void testReadUserFromExcelFile_UsernameIsNumeric() throws IOException {
@@ -256,10 +253,29 @@ class ExcelServiceImplTest {
                 () -> excelService.readUserFromExcelFile(excelFile.toString())
         );
 
-        log.info("[UT_AM_086] exception={}", ex.getClass().getSimpleName());
+        log.info("[UT_AM_084] exception={}", ex.getClass().getSimpleName());
     }
 
-    // Test Case ID: UT_AM_087
+    // UT_AM_085
+    // Kiểm tra giá trị trong file excel rỗng
+    @Test
+    void testGetCellValue_blankCell() throws IOException {
+        Path excelFile = tempDir.resolve("blank-cell.xlsx");
+        writeWorkbook(excelFile, workbook -> {
+            Sheet sheet = workbook.createSheet("Users");
+            Row row = sheet.createRow(0);
+            row.createCell(0); // blank
+        });
+
+        when(passwordEncoder.encode(null)).thenReturn("encoded-null");
+
+        List<User> users = excelService.readUserFromExcelFile(excelFile.toString());
+
+        assertEquals(1, users.size());
+        assertNull(users.get(0).getUsername());
+    }
+
+    // Test Case ID: UT_AM_086
     // Kiem thu xuat file excel chua danh sach user
     @Test
     void testWriteUserToExcelFile() throws IOException {
@@ -290,11 +306,11 @@ class ExcelServiceImplTest {
             assertEquals("Tran", sheet.getRow(2).getCell(2).getStringCellValue());
             assertEquals("bob@example.com", sheet.getRow(2).getCell(3).getStringCellValue());
 
-            log.info("[UT_AM_087] exportedFile={}, rows={}", exportedUsersFile, sheet.getLastRowNum() + 1);
+            log.info("[UT_AM_086] exportedFile={}, rows={}", exportedUsersFile, sheet.getLastRowNum() + 1);
         }
     }
 
-    // Test Case ID: UT_AM_088
+    // Test Case ID: UT_AM_087
     // Kiem thu chi luu user chua ton tai trong DB
     @Test
     void testInsertUserToDB_savesOnlyUsersNotExist() {
@@ -314,7 +330,7 @@ class ExcelServiceImplTest {
         verify(userRepository, never()).save(existingUser);
         verify(userRepository).save(newUser);
 
-        log.info("[UT_AM_088] existingUser={}, newUser={}", existingUser.getUsername(), newUser.getUsername());
+        log.info("[UT_AM_087] existingUser={}, newUser={}", existingUser.getUsername(), newUser.getUsername());
     }
 
     private void writeWorkbook(Path file, WorkbookWriter writer) throws IOException {

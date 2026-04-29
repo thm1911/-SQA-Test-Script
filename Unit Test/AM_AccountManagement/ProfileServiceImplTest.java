@@ -30,7 +30,7 @@ class ProfileServiceImplTest {
         profileService = new ProfileServiceImpl(profileRepository);
     }
 
-    // Test Case ID: UT_AM_075
+    // Test Case ID: UT_AM_073
     // Kiểm thử lưu profile thành công
     @Test
     void testCreateProfile_Success() {
@@ -46,10 +46,10 @@ class ProfileServiceImplTest {
         assertEquals("avatar.png", result.getImage());
         verify(profileRepository).save(profile);
 
-        log.info("[UT_AM_075] result={}", result);
+        log.info("[UT_AM_073] result={}", result);
     }
 
-    // Test Case ID: UT_AM_076
+    // Test Case ID: UT_AM_074
     // Kiểm thử lưu profile với field null
     @Test
     void testCreateProfile_WithNullFields() {
@@ -64,10 +64,11 @@ class ProfileServiceImplTest {
         assertEquals(null, result.getImage());
         verify(profileRepository).save(profile);
 
-        log.info("[UT_AM_076] result={}", result);
+        log.info("[UT_AM_074] result={}", result);
     }
 
-    // Test Case ID: UT_AM_077
+    // Test Case ID: UT_AM_075
+    // Kiểm tra lấy ra hàm profile thành công
     @Test
     void testGetAllProfiles_WithData() {
         List<Profile> profiles = Arrays.asList(
@@ -83,6 +84,6 @@ class ProfileServiceImplTest {
         assertEquals("Minh", result.get(1).getFirstName());
         verify(profileRepository).findAll();
 
-        log.info("[UT_AM_077] result={}", result);
+        log.info("[UT_AM_075] result={}", result);
     }
 }
