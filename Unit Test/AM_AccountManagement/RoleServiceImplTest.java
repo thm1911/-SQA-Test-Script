@@ -25,7 +25,7 @@ class RoleServiceImplTest {
         roleService = new RoleServiceImpl(roleRepository);
     }
 
-    // Test Case ID: UT_AM_070
+    // Test Case ID: UT_AM_068
     // Kiểm trhuwr tìm kiếm role theo tên role admin
     @Test
     void testFindByNameWithAdminRole() {
@@ -38,10 +38,10 @@ class RoleServiceImplTest {
         assertEquals(ERole.ROLE_ADMIN, result.get().getName());
         verify(roleRepository).findByName(ERole.ROLE_ADMIN);
 
-        log.info("[UT_AM_070] result={}", result);
+        log.info("[UT_AM_068] result={}", result);
     }
 
-    // Test Case ID: UT_AM_071
+    // Test Case ID: UT_AM_069
     // Kiểm thử tìm kiếm role theo role lecturer
     @Test
     void testFindByNameWithLecturerRole() {
@@ -54,10 +54,10 @@ class RoleServiceImplTest {
         assertEquals(ERole.ROLE_LECTURER, result.get().getName());
         verify(roleRepository).findByName(ERole.ROLE_LECTURER);
 
-        log.info("[UT_AM_075] result={}", result);
+        log.info("[UT_AM_069] result={}", result);
     }
 
-    // Test Case ID: UT_AM_072
+    // Test Case ID: UT_AM_070
     // Kiểm thử tìm kiếm role theo role student
     @Test
     void testFindByNameWithStudentRole() {
@@ -70,10 +70,10 @@ class RoleServiceImplTest {
         assertEquals(ERole.ROLE_STUDENT, result.get().getName());
         verify(roleRepository).findByName(ERole.ROLE_STUDENT);
 
-        log.info("[UT_AM_076] result={}", result);
+        log.info("[UT_AM_070] result={}", result);
     }
 
-    // Test Case ID: UT_AM_073
+    // Test Case ID: UT_AM_071
     // Kiểm thử tìm kiếm role với role truyền vào không có trong hệ thống
     @Test
     void testFindByNameWhenRoleDoesNotExist() {
@@ -84,10 +84,10 @@ class RoleServiceImplTest {
         assertFalse(result.isPresent());
         verify(roleRepository).findByName(ERole.ROLE_ADMIN);
 
-        log.info("[UT_AM_077] result={}", result);
+        log.info("[UT_AM_071] result={}", result);
     }
 
-    // Test Case ID: UT_AM_074
+    // Test Case ID: UT_AM_072
     // Kiểm thử tìm kiếm role vói role truyền vào bị null
     @Test
     void testFindByNameWithNullRole() {
@@ -100,6 +100,6 @@ class RoleServiceImplTest {
 
         verify(roleRepository, never()).findByName(any());
 
-        log.info("[UT_AM_074] exception={}", ex.getMessage());
+        log.info("[UT_AM_072] exception={}", ex.getMessage());
     }
 }

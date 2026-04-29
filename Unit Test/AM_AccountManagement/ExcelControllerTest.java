@@ -36,7 +36,7 @@ class ExcelControllerTest {
     }
 
 
-    // Test Case ID: UT_AM_078
+    // Test Case ID: UT_AM_076
     // Kiểm thử thêm user vào DB thông qua file excel
     @Test
     void testUploadUserToDB_Success() throws IOException {
@@ -70,10 +70,10 @@ class ExcelControllerTest {
         inOrder.verify(mockExcelService).InsertUserToDB(users);
         verify(mockFilesStorageService).deleteAllUserExcel("users.xlsx");
 
-        log.info("[UT_AM_078] response={}", response);
+        log.info("[UT_AM_076] response={}", response);
     }
 
-    // Test Case ID: UT_AM_079
+    // Test Case ID: UT_AM_077
     // Kiểm thử thêm user vào DB thông qua file excel
     @Test
     void testUploadUserToDB_FailureStillDeletesTempFile() throws IOException {
@@ -102,6 +102,6 @@ class ExcelControllerTest {
         verify(mockExcelService, never()).InsertUserToDB(anyList());
         verify(mockFilesStorageService).deleteAllUserExcel("invalid.xlsx");
 
-        log.info("[UT_AM_079] response={}", response);
+        log.info("[UT_AM_077] response={}", response);
     }
 }

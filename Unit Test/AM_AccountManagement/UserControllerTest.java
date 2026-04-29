@@ -104,6 +104,7 @@ class UserControllerTest {
     // Kiểm tra lấy thông tin user mà truyền vào username rỗng
     @Test
     void testGetUserProfile_EmptyUsername() {
+        //Mock data
         String currentUsername = "current.user";
 
         User user = new User();
@@ -122,7 +123,6 @@ class UserControllerTest {
         ServiceResult body = (ServiceResult) response.getBody();
         assertNotNull(body);
         assertEquals(HttpStatus.OK.value(), body.getStatusCode());
-        // Note: controller builds message using the request param `username`, which is empty here.
         assertEquals("Lấy thông tin user thành công!", body.getMessage());
 
         verify(mockUserService).getUserName();
@@ -353,7 +353,7 @@ class UserControllerTest {
     }
 
     // Test Case ID: UT_AM_020
-    // Test updating password when user is not found
+    // Kiểm tra update password vơi user không tồn tại
     @Test
     void testUpdatePassword_UserNotFound() {
         long userId = 999L;
@@ -374,7 +374,7 @@ class UserControllerTest {
     }
 
     // Test Case ID: UT_AM_021
-    // Test getting users by pagination
+    // Kiểm tra lấy ra user theo pageable
     @Test
     void testGetUsersByPage_Success() {
         Pageable pageable = PageRequest.of(0, 10);
@@ -400,7 +400,7 @@ class UserControllerTest {
         assertNotNull(result.getPaginationDetails());
         verify(mockUserService).findUsersByPage(pageable);
 
-        log.info("[UT_AM_020] pageResult={}", result.getData());
+        log.info("[UT_AM_021] pageResult={}", result.getData());
     }
 
     // Test Case ID: UT_AM_022
@@ -601,7 +601,7 @@ class UserControllerTest {
     }
 
     // Test Case ID: UT_AM_031
-    // Test update user with null password (no change)
+    // Kiểm tra update user với password không truyền vào
     @Test
     void testUpdateUser_NullPassword() {
         long userId = 1L;
