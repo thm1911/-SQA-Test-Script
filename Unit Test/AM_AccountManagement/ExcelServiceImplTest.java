@@ -276,6 +276,30 @@ class ExcelServiceImplTest {
     }
 
     // Test Case ID: UT_AM_086
+    // Kiểm tra getCellValue với CELL_TYPE_FORMULA (hoặc CELL_TYPE_ERROR)
+    // → không khớp case nào → trả về null
+    @Test
+    void testReadUserFromExcelFile_formulaCellReturnsNull() throws IOException {
+        Path excelFile = tempDir.resolve("formula-cell.xlsx");
+        writeWorkbook(excelFile, workbook -> {
+            Sheet sheet = workbook.createSheet("Users");
+            Row row = sheet.createRow(0);
+            // Tạo formula cell — CellType.FORMULA không có trong switch
+            row.createCell(0).setCellFormula("A2");
+        });
+
+        when(passwordEncoder.encode(null)).thenReturn("encoded-null");
+
+        List<User> users = excelService.readUserFromExcelFile(excelFile.toString());
+
+        assertEquals(1, users.size());
+        // getCellValue trả về null → username null
+        assertNull(users.get(0).getUsername());
+
+        log.info("[UT_AM_086] users={}", users.get(0).getUsername());
+    }
+
+    // Test Case ID: UT_AM_087
     // Kiem thu xuat file excel chua danh sach user
     @Test
     void testWriteUserToExcelFile() throws IOException {
@@ -306,11 +330,11 @@ class ExcelServiceImplTest {
             assertEquals("Tran", sheet.getRow(2).getCell(2).getStringCellValue());
             assertEquals("bob@example.com", sheet.getRow(2).getCell(3).getStringCellValue());
 
-            log.info("[UT_AM_086] exportedFile={}, rows={}", exportedUsersFile, sheet.getLastRowNum() + 1);
+            log.info("[UT_AM_087] exportedFile={}, rows={}", exportedUsersFile, sheet.getLastRowNum() + 1);
         }
     }
 
-    // Test Case ID: UT_AM_087
+    // Test Case ID: UT_AM_088
     // Kiem thu chi luu user chua ton tai trong DB
     @Test
     void testInsertUserToDB_savesOnlyUsersNotExist() {
@@ -330,7 +354,7 @@ class ExcelServiceImplTest {
         verify(userRepository, never()).save(existingUser);
         verify(userRepository).save(newUser);
 
-        log.info("[UT_AM_087] existingUser={}, newUser={}", existingUser.getUsername(), newUser.getUsername());
+        log.info("[UT_AM_088] existingUser={}, newUser={}", existingUser.getUsername(), newUser.getUsername());
     }
 
     private void writeWorkbook(Path file, WorkbookWriter writer) throws IOException {
