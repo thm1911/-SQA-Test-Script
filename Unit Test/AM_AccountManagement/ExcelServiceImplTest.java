@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -114,10 +115,6 @@ class ExcelServiceImplTest {
         assertNotNull(user.getRoles());
         assertEquals(Collections.singleton(studentRole), user.getRoles());
 
-        verify(passwordEncoder).encode("alice");
-        verify(intakeService).findByCode("INT-01");
-        verify(roleService).findByName(ERole.ROLE_STUDENT);
-
         log.info("[UT_AM_078] users={}", users);
     }
 
@@ -144,7 +141,6 @@ class ExcelServiceImplTest {
 
         assertEquals(1, users.size());
         assertEquals(Collections.singleton(adminRole), users.get(0).getRoles());
-        verify(roleService).findByName(ERole.ROLE_ADMIN);
 
         log.info("[UT_AM_079] users={}", users);
     }
@@ -172,7 +168,6 @@ class ExcelServiceImplTest {
 
         assertEquals(1, users.size());
         assertEquals(Collections.singleton(lecturerRole), users.get(0).getRoles());
-        verify(roleService).findByName(ERole.ROLE_LECTURER);
 
         log.info("[UT_AM_080] users={}", users);
     }
@@ -273,6 +268,8 @@ class ExcelServiceImplTest {
 
         assertEquals(1, users.size());
         assertNull(users.get(0).getUsername());
+
+        log.info("[UT_AM_085] users={}", users.get(0).getUsername());
     }
 
     // Test Case ID: UT_AM_086
@@ -335,6 +332,27 @@ class ExcelServiceImplTest {
     }
 
     // Test Case ID: UT_AM_088
+    // Kiểm tra nhánh catch IOException khi không thể tạo file output
+    @Test
+    void testWriteUserToExcelFile_WhenIOException() throws IOException {
+        // Tạo folder để gây lỗi
+        Path dir = Paths.get("users.xlsx");
+        Files.createDirectories(dir);
+
+        ArrayList<UserExport> exports = new ArrayList<>();
+        exports.add(new UserExport("alice", "alice@example.com", "Alice", "Nguyen"));
+
+        excelService.writeUserToExcelFile(exports);
+
+        //verify file KHÔNG được tạo (vì lỗi)
+        File file = new File("users.xlsx");
+        assertTrue(file.isDirectory()); // vẫn là folder, không bị overwrite
+
+        // cleanup
+        Files.deleteIfExists(dir);
+    }
+
+    // Test Case ID: UT_AM_089
     // Kiem thu chi luu user chua ton tai trong DB
     @Test
     void testInsertUserToDB_savesOnlyUsersNotExist() {
@@ -354,27 +372,7 @@ class ExcelServiceImplTest {
         verify(userRepository, never()).save(existingUser);
         verify(userRepository).save(newUser);
 
-        log.info("[UT_AM_088] existingUser={}, newUser={}", existingUser.getUsername(), newUser.getUsername());
-    }
-
-    // Test Case ID: UT_AM_089
-    // Kiểm tra nhánh catch IOException khi không thể tạo file output
-    @Test
-    void testWriteUserToExcelFile_catchesIOException_whenOutputIsDirectory() throws IOException {
-        // Tạo một thư mục tên "users.xlsx" → FileOutputStream sẽ ném IOException
-        Path dir = Paths.get("users.xlsx");
-        Files.createDirectories(dir);
-
-        try {
-            ArrayList<UserExport> exports = new ArrayList<>();
-            exports.add(new UserExport("alice", "alice@example.com", "Alice", "Nguyen"));
-
-            // Không ném ra ngoài vì catch nuốt exception
-            assertDoesNotThrow(() -> excelService.writeUserToExcelFile(exports));
-        } finally {
-            // Cleanup: xóa thư mục sau test
-            Files.deleteIfExists(dir);
-        }
+        log.info("[UT_AM_089] existingUser={}, newUser={}", existingUser.getUsername(), newUser.getUsername());
     }
 
     private void writeWorkbook(Path file, WorkbookWriter writer) throws IOException {

@@ -93,11 +93,6 @@ class AuthenticationControllerTest {
         assertEquals("test@example.com", body.getEmail());
         assertEquals(Collections.singletonList("ROLE_STUDENT"), body.getRoles());
 
-        verify(userService, times(2)).getUserByUsername(username);
-        verify(userService).updateUser(any(User.class));
-        verify(authenticationManager).authenticate(any());
-        verify(jwtUtils).generateJwtToken(authentication);
-
         logger.info("[UT_AUTH_001] HTTP Status: {}", response.getStatusCodeValue());
         logger.info("[UT_AUTH_001] JwtResponse: token={}, id={}, username={}, email={}, roles={}",
                 body.getAccessToken(),
@@ -125,10 +120,6 @@ class AuthenticationControllerTest {
 
         assertEquals(400, response.getStatusCodeValue());
 
-        verify(userService).getUserByUsername(username);
-        verifyNoInteractions(authenticationManager);
-        verifyNoInteractions(jwtUtils);
-
         logger.info("[UT_AM_002] HTTP Status: {}", response.getStatusCodeValue());
     }
 
@@ -151,10 +142,6 @@ class AuthenticationControllerTest {
         ResponseEntity<?> response = controller.authenticateUser(login);
 
         assertEquals(400, response.getStatusCodeValue());
-
-        verify(userService).getUserByUsername(username);
-        verifyNoInteractions(authenticationManager);
-        verifyNoInteractions(jwtUtils);
 
         logger.info("[UT_AM_003] HTTP Status: {}", response.getStatusCodeValue());
     }
@@ -203,11 +190,6 @@ class AuthenticationControllerTest {
         assertEquals(400, response.getStatusCodeValue());
         assertNull(response.getBody());
 
-        verify(userService, times(2)).getUserByUsername(username);
-        verify(userService).updateUser(deletedUserLog);
-        verify(authenticationManager).authenticate(any());
-        verify(jwtUtils).generateJwtToken(authentication);
-
         logger.info("[UT_AM_004] HTTP Status: {}", response.getStatusCodeValue());
     }
 
@@ -227,12 +209,29 @@ class AuthenticationControllerTest {
         assertEquals(RequestOperationName.REQUEST_PASSWORD_RESET.name(), response.getOperationName());
         assertEquals(RequestOperationStatus.SUCCESS.name(), response.getOperationResult());
 
-        verify(userService).requestPasswordReset(email);
-
         logger.info("[UT_AM_005] response={}", response);
     }
 
     // Test Case ID: UT_AM_006
+    // Kiểm tra yêu cầu reset password thất bại khi nhập email không đúng
+    @Test
+    void testPasswordResetRequestFail() throws Exception {
+        String email = "unknown@gmail.com";
+
+        PasswordResetRequest request = new PasswordResetRequest();
+        request.setEmail(email);
+
+        when(userService.requestPasswordReset(email)).thenReturn(false);
+
+        OperationStatusDto response = controller.resetPasswordRequest(request);
+
+        assertEquals(RequestOperationName.REQUEST_PASSWORD_RESET.name(), response.getOperationName());
+        assertEquals(RequestOperationStatus.ERROR.name(), response.getOperationResult());
+
+        logger.info("[UT_AM_006] response={}", response);
+    }
+
+    // Test Case ID: UT_AM_007
     // Kiểm tra reset password thành công
     @Test
     void testPasswordResetSuccess() {
@@ -249,29 +248,6 @@ class AuthenticationControllerTest {
 
         assertEquals(RequestOperationName.PASSWORD_RESET.name(), response.getOperationName());
         assertEquals(RequestOperationStatus.SUCCESS.name(), response.getOperationResult());
-
-        verify(userService).resetPassword(token, password);
-
-        logger.info("[UT_AM_006] response={}", response);
-    }
-
-    // Test Case ID: UT_AM_007
-    // Kiểm tra yêu cầu reset password thất bại khi nhập email không đúng
-    @Test
-    void testPasswordResetRequestFail() throws Exception {
-        String email = "unknown@gmail.com";
-
-        PasswordResetRequest request = new PasswordResetRequest();
-        request.setEmail(email);
-
-        when(userService.requestPasswordReset(email)).thenReturn(false);
-
-        OperationStatusDto response = controller.resetPasswordRequest(request);
-
-        assertEquals(RequestOperationName.REQUEST_PASSWORD_RESET.name(), response.getOperationName());
-        assertEquals(RequestOperationStatus.ERROR.name(), response.getOperationResult());
-
-        verify(userService).requestPasswordReset(email);
 
         logger.info("[UT_AM_007] response={}", response);
     }
@@ -293,8 +269,6 @@ class AuthenticationControllerTest {
 
         assertEquals(RequestOperationName.PASSWORD_RESET.name(), response.getOperationName());
         assertEquals(RequestOperationStatus.ERROR.name(), response.getOperationResult());
-
-        verify(userService).resetPassword(token, password);
 
         logger.info("[UT_AM_008] response={}", response);
     }

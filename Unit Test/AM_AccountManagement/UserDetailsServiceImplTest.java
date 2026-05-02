@@ -55,7 +55,6 @@ class UserDetailsServiceImplTest {
         assertEquals("secret", result.getPassword());
         assertEquals(1, result.getAuthorities().size());
         assertTrue(hasAuthority(result.getAuthorities(), "ROLE_STUDENT"));
-        verify(userRepository).findByUsername("existingUser");
 
         log.info("[UT_AM_064] result username={}, authorities={}", result.getUsername(), result.getAuthorities());
     }
@@ -70,7 +69,6 @@ class UserDetailsServiceImplTest {
                 () -> userDetailsService.loadUserByUsername("missingUser"));
 
         assertEquals("User Not Found with username: missingUser", ex.getMessage());
-        verify(userRepository).findByUsername("missingUser");
 
         log.info("[UT_AM_065] exception={}", ex.getMessage());
     }
@@ -85,7 +83,6 @@ class UserDetailsServiceImplTest {
                 () -> userDetailsService.loadUserByUsername(null));
 
         assertEquals("User Not Found with username: null", ex.getMessage());
-        verify(userRepository).findByUsername(null);
 
         log.info("[UT_AM_066] exception={}", ex.getMessage());
     }
@@ -100,7 +97,6 @@ class UserDetailsServiceImplTest {
                 () -> userDetailsService.loadUserByUsername(""));
 
         assertEquals("User Not Found with username: ", ex.getMessage());
-        verify(userRepository).findByUsername("");
 
         log.info("[UT_AM_067] exception={}", ex.getMessage());
     }

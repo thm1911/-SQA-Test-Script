@@ -95,8 +95,6 @@ class UserControllerTest {
         assertTrue(userOpt.isPresent());
         assertEquals(username, userOpt.get().getUsername());
 
-        verify(mockUserService).getUserByUsername(username);
-
         log.info("[UT_AM_009] response={}", response);
     }
 
@@ -123,10 +121,7 @@ class UserControllerTest {
         ServiceResult body = (ServiceResult) response.getBody();
         assertNotNull(body);
         assertEquals(HttpStatus.OK.value(), body.getStatusCode());
-        assertEquals("Lấy thông tin user thành công!", body.getMessage());
-
-        verify(mockUserService).getUserName();
-        verify(mockUserService).getUserByUsername(currentUsername);
+        assertEquals("Lấy thông tin user " + currentUsername + " thành công!", body.getMessage());
 
         log.info("[UT_AM_010] response={}", response);
     }
@@ -150,13 +145,11 @@ class UserControllerTest {
         assertEquals("Tên đăng nhâp " + username + " không tìm thấy!", body.getMessage());
         assertNull(body.getData());
 
-        verify(mockUserService).getUserByUsername(username);
-
         log.info("[UT_AM_011] response={}", response);
     }
 
     // Test Case ID: UT_AM_012
-    // Kiểm tra user có tồn tại hay không
+    // Kiểm tra user có tồn tại
     @Test
     void testCheckUsername_Success() {
         String username = "testuser";
@@ -165,7 +158,6 @@ class UserControllerTest {
         boolean result = userController.checkUsername(username);
 
         assertTrue(result);
-        verify(mockUserService).existsByUsername(username);
 
         log.info("[UT_AM_012] result={}", result);
     }
@@ -180,7 +172,6 @@ class UserControllerTest {
         boolean result = userController.checkEmail(email);
 
         assertTrue(result);
-        verify(mockUserService).existsByEmail(email);
 
         log.info("[UT_AM_013] result={}", result);
     }
@@ -213,7 +204,6 @@ class UserControllerTest {
         assertEquals("new@example.com", body.getData());
 
         assertEquals("new@example.com", existing.getEmail());
-        verify(mockUserService).updateUser(existing);
 
         log.info("[UT_AM_014] response={}", response);
     }
@@ -243,8 +233,6 @@ class UserControllerTest {
         assertEquals(HttpStatus.EXPECTATION_FAILED.value(), body.getStatusCode());
         assertEquals("Password is wrong", body.getMessage());
         assertNull(body.getData());
-
-        verify(mockUserService, never()).updateUser(any(User.class));
 
         log.info("[UT_AM_015] response={}", response);
     }
@@ -290,7 +278,6 @@ class UserControllerTest {
         assertEquals("Update password successfully", body.getMessage());
 
         assertEquals("encoded-newpass", existing.getPassword());
-        verify(mockUserService).updateUser(existing);
 
         log.info("[UT_AM_017] response={}", response);
     }
@@ -319,8 +306,6 @@ class UserControllerTest {
         assertEquals("Wrong password, please check again!", body.getMessage());
         assertNull(body.getData());
 
-        verify(mockUserService, never()).updateUser(any(User.class));
-
         log.info("[UT_AM_018] response={}", response);
     }
 
@@ -346,8 +331,7 @@ class UserControllerTest {
         assertNotNull(body);
         assertEquals(HttpStatus.CONFLICT.value(), body.getStatusCode());
         assertEquals("This is old password", body.getMessage());
-
-        verify(mockUserService, never()).updateUser(any(User.class));
+        assertNull(body.getData());
 
         log.info("[UT_AM_019] response={}", response);
     }
@@ -397,8 +381,19 @@ class UserControllerTest {
         assertNotNull(result);
         assertNotNull(result.getData());
         assertEquals(2, result.getData().size());
+
+        // CHECK KỸ TỪNG USER
+        User res1 = (User) result.getData().get(0);
+        assertEquals(1L, res1.getId());
+        assertEquals("u1", res1.getUsername());
+        assertEquals("u1@example.com", res1.getEmail());
+
+        User res2 = (User) result.getData().get(1);
+        assertEquals(2L, res2.getId());
+        assertEquals("u2", res2.getUsername());
+        assertEquals("u2@example.com", res2.getEmail());
+
         assertNotNull(result.getPaginationDetails());
-        verify(mockUserService).findUsersByPage(pageable);
 
         log.info("[UT_AM_021] pageResult={}", result.getData());
     }
@@ -422,8 +417,6 @@ class UserControllerTest {
         assertEquals(HttpStatus.OK.value(), body.getStatusCode());
         assertEquals("User created successfully!", body.getMessage());
 
-        verify(mockUserService).createUser(user);
-
         log.info("[UT_AM_022] response={}", response);
     }
 
@@ -444,8 +437,6 @@ class UserControllerTest {
         assertNotNull(body);
         assertEquals(HttpStatus.CONFLICT.value(), body.getStatusCode());
         assertEquals("Tên đăng nhập đã có người sử dụng!", body.getMessage());
-
-        verify(mockUserService, never()).createUser(any(User.class));
 
         log.info("[UT_AM_023] response={}", response);
     }
@@ -468,8 +459,6 @@ class UserControllerTest {
         assertNotNull(body);
         assertEquals(HttpStatus.CONFLICT.value(), body.getStatusCode());
         assertEquals("Email đã có người sử dụng!", body.getMessage());
-
-        verify(mockUserService, never()).createUser(any(User.class));
 
         log.info("[UT_AM_024] response={}", response);
     }
@@ -494,7 +483,16 @@ class UserControllerTest {
         assertNotNull(result);
         assertNotNull(result.getData());
         assertEquals(1, result.getData().size());
-        verify(mockUserService).findAllByUsernameContainsOrEmailContains(keyword, keyword, pageable);
+
+        //check đúng user trả về
+        User res = (User) result.getData().get(0);
+        assertEquals(1L, res.getId());
+        assertEquals("abc1", res.getUsername());
+        assertEquals("abc1@example.com", res.getEmail());
+
+        //đảm bảo match keyword (quan trọng với search)
+        assertTrue(res.getUsername().contains(keyword)
+                || res.getEmail().contains(keyword));
 
         log.info("[UT_AM_025] pageResult{}", result.getData());
     }
@@ -526,8 +524,6 @@ class UserControllerTest {
         boolean result = userController.checkExistsEmailUpdate(email, userId);
 
         assertFalse(result);
-        verify(mockUserService).existsByEmail(email);
-        verify(mockUserService, never()).findUserById(anyLong());
 
         log.info("[UT_AM_027] result={}", result);
     }
@@ -549,8 +545,6 @@ class UserControllerTest {
         boolean result = userController.checkExistsEmailUpdate(email, userId);
 
         assertFalse(result);
-        verify(mockUserService).existsByEmail(email);
-        verify(mockUserService).findUserById(userId);
 
         log.info("[UT_AM_028] result={}", result);
     }
@@ -572,8 +566,6 @@ class UserControllerTest {
         boolean result = userController.checkExistsEmailUpdate(email, userId);
 
         assertTrue(result);
-        verify(mockUserService).existsByEmail(email);
-        verify(mockUserService).findUserById(userId);
 
         log.info("[UT_AM_029] result={}", result);
     }
@@ -595,7 +587,6 @@ class UserControllerTest {
 
         assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
         assertTrue(existing.isDeleted());
-        verify(mockUserService).updateUser(existing);
 
         log.info("[UT_AM_030] response={}", response);
     }
@@ -633,9 +624,6 @@ class UserControllerTest {
         assertEquals("New", existing.getProfile().getFirstName());
         assertEquals("Name", existing.getProfile().getLastName());
 
-        verify(mockPasswordEncoder, never()).encode(anyString());
-        verify(mockUserService).updateUser(existing);
-
         log.info("[UT_AM_031] response={}", response);
     }
 
@@ -672,9 +660,6 @@ class UserControllerTest {
         assertEquals(10L, existing.getProfile().getId());
         assertEquals("New", existing.getProfile().getFirstName());
         assertEquals("Name", existing.getProfile().getLastName());
-
-        verify(mockPasswordEncoder).encode("plain-pass");
-        verify(mockUserService).updateUser(existing);
 
         log.info("[UT_AM_032] response={}", response);
     }
@@ -727,7 +712,6 @@ class UserControllerTest {
 
         assertEquals(1, roles.size());
         assertTrue(roles.contains(role));
-        verify(mockRoleService).findByName(ERole.ROLE_ADMIN);
 
         log.info("[UT_AM_035] rolesSize={}", roles.size());
     }

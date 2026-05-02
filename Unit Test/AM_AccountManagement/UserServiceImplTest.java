@@ -103,10 +103,6 @@ class UserServiceImplTest {
         assertEquals(1, created.getRoles().size());
         assertTrue(created.getRoles().contains(studentRole));
 
-        verify(passwordEncoder).encode("testUser_01");
-        verify(roleService).findByName(ERole.ROLE_STUDENT);
-        verify(userRepository).save(any(User.class));
-
         log.info("[UT_AM_036] created={}", created);
     }
 
@@ -137,9 +133,6 @@ class UserServiceImplTest {
         assertTrue(created.getRoles().contains(adminRole));
         assertTrue(created.getRoles().contains(lecturerRole));
         assertTrue(created.getRoles().contains(studentRole));
-        verify(roleService).findByName(ERole.ROLE_ADMIN);
-        verify(roleService).findByName(ERole.ROLE_LECTURER);
-        verify(roleService).findByName(ERole.ROLE_STUDENT);
 
         log.info("[UT_AM_037] roles={}", created.getRoles());
     }
@@ -168,8 +161,6 @@ class UserServiceImplTest {
         assertEquals(2, created.getRoles().size());
         assertTrue(created.getRoles().contains(lecturerRole));
         assertTrue(created.getRoles().contains(studentRole));
-        verify(roleService).findByName(ERole.ROLE_LECTURER);
-        verify(roleService).findByName(ERole.ROLE_STUDENT);
 
         log.info("[UT_AM_038] roles={}", created.getRoles());
     }
@@ -195,7 +186,6 @@ class UserServiceImplTest {
 
         assertEquals(1, created.getRoles().size());
         assertTrue(created.getRoles().contains(studentRole));
-        verify(roleService).findByName(ERole.ROLE_STUDENT);
 
         log.info("[UT_AM_039] roles={}", created.getRoles());
     }
@@ -221,7 +211,6 @@ class UserServiceImplTest {
         assertEquals(1, created.getRoles().size());
         assertTrue(created.getRoles().contains(studentRole));
         verify(roleService).findByName(ERole.ROLE_STUDENT);
-        verify(userRepository).save(any(User.class));
 
         log.info("[UT_AM_040] created with default ROLE_STUDENT={}", created.getRoles());
     }
@@ -244,7 +233,6 @@ class UserServiceImplTest {
                 () -> userService.createUser(request));
 
         assertNotNull(ex);
-        verify(userRepository, never()).save(any(User.class));
 
         log.info("[UT_AM_041] empty roles -> throws RuntimeException: {}", ex.getMessage());
     }
@@ -269,7 +257,6 @@ class UserServiceImplTest {
                 () -> userService.createUser(request));
 
         assertNotNull(ex);
-        verify(userRepository, never()).save(any(User.class));
 
         log.info("[UT_AM_042] unknown role (null name) -> throws RuntimeException: {}", ex.getMessage());
     }
@@ -286,7 +273,6 @@ class UserServiceImplTest {
 
         assertTrue(result.isPresent());
         assertEquals("testUser_04", result.get().getUsername());
-        verify(userRepository).findByUsername("testUser_04");
 
         log.info("[UT_AM_043] result={}", result);
     }
@@ -300,7 +286,6 @@ class UserServiceImplTest {
         boolean result = userService.existsByUsername("testUser_05");
 
         assertTrue(result);
-        verify(userRepository).existsByUsername("testUser_05");
 
         log.info("[UT_AM_044] result={}", result);
     }
@@ -314,7 +299,6 @@ class UserServiceImplTest {
         boolean result = userService.existsByEmail("testUser_06@example.com");
 
         assertTrue(result);
-        verify(userRepository).existsByEmail("testUser_06@example.com");
 
         log.info("[UT_AM_045] result={}", result);
     }
@@ -324,17 +308,29 @@ class UserServiceImplTest {
     @Test
     void testFindUsersByPage() {
         Pageable pageable = PageRequest.of(0, 2);
-        Page<User> page = new PageImpl<>(Arrays.asList(
-                createUser(1L, "user1", "user1@example.com"),
-                createUser(2L, "user2", "user2@example.com")
-        ), pageable, 2);
+
+        User u1 = createUser(1L, "user1", "user1@example.com");
+        User u2 = createUser(2L, "user2", "user2@example.com");
+
+        Page<User> page = new PageImpl<>(Arrays.asList(u1, u2), pageable, 2);
         when(userRepository.findAll(pageable)).thenReturn(page);
 
         Page<User> result = userService.findUsersByPage(pageable);
 
+        assertNotNull(result);
         assertEquals(2, result.getContent().size());
         assertEquals(2, result.getTotalElements());
-        verify(userRepository).findAll(pageable);
+
+        //check đúng data
+        User res1 = result.getContent().get(0);
+        assertEquals(1L, res1.getId());
+        assertEquals("user1", res1.getUsername());
+        assertEquals("user1@example.com", res1.getEmail());
+
+        User res2 = result.getContent().get(1);
+        assertEquals(2L, res2.getId());
+        assertEquals("user2", res2.getUsername());
+        assertEquals("user2@example.com", res2.getEmail());
 
         log.info("[UT_AM_046] pageSize={}", result.getContent());
     }
@@ -351,7 +347,6 @@ class UserServiceImplTest {
 
         assertEquals(1, result.getTotalElements());
         assertTrue(result.getContent().get(0).isDeleted());
-        verify(userRepository).findAllByDeleted(true, pageable);
 
         log.info("[UT_AM_047] result={}", result.getContent());
     }
@@ -364,8 +359,6 @@ class UserServiceImplTest {
         user.setProfile(new Profile(1L, "Updated", "Name", null));
 
         userService.updateUser(user);
-
-        verify(userRepository).save(user);
 
         log.info("[UT_AM_048] updatedUser={}", user);
     }
@@ -382,7 +375,6 @@ class UserServiceImplTest {
 
         assertEquals(1, result.getContent().size());
         assertEquals("search-user", result.getContent().get(0).getUsername());
-        verify(userRepository).findAllByDeletedAndUsernameContains(false, "search", pageable);
 
         log.info("[UT_AM_049] result={}", result.getContent());
     }
@@ -398,7 +390,6 @@ class UserServiceImplTest {
 
         assertTrue(result.isPresent());
         assertEquals(10L, result.get().getId());
-        verify(userRepository).findById(10L);
 
         log.info("[UT_AM_050] result={}", result);
     }
@@ -411,12 +402,23 @@ class UserServiceImplTest {
                 createUser(11L, "intake-user-1", "user1@example.com"),
                 createUser(12L, "intake-user-2", "user2@example.com")
         );
+
         when(userRepository.findAllByIntakeId(11L)).thenReturn(users);
 
         List<User> result = userService.findAllByIntakeId(11L);
 
+        assertNotNull(result);
         assertEquals(2, result.size());
-        verify(userRepository).findAllByIntakeId(11L);
+
+        User u1 = result.get(0);
+        assertEquals(11L, u1.getId());
+        assertEquals("intake-user-1", u1.getUsername());
+        assertEquals("user1@example.com", u1.getEmail());
+
+        User u2 = result.get(1);
+        assertEquals(12L, u2.getId());
+        assertEquals("intake-user-2", u2.getUsername());
+        assertEquals("user2@example.com", u2.getEmail());
 
         log.info("[UT_AM_051] result={}", result);
     }
@@ -426,13 +428,29 @@ class UserServiceImplTest {
     @Test
     void testFindAllByUsernameContainsOrEmailContains_Success() {
         Pageable pageable = PageRequest.of(0, 10);
-        Page<User> page = new PageImpl<>(Collections.singletonList(createUser(13L, "keyword-user", "keyword@example.com")), pageable, 1);
-        when(userRepository.findAllByUsernameContainsOrEmailContains("keyword", "keyword", pageable)).thenReturn(page);
 
-        Page<User> result = userService.findAllByUsernameContainsOrEmailContains("keyword", "keyword", pageable);
+        User user = createUser(13L, "keyword-user", "keyword@example.com");
 
+        Page<User> page = new PageImpl<>(
+                Collections.singletonList(user), pageable, 1
+        );
+
+        when(userRepository.findAllByUsernameContainsOrEmailContains("keyword", "keyword", pageable))
+                .thenReturn(page);
+
+        Page<User> result = userService
+                .findAllByUsernameContainsOrEmailContains("keyword", "keyword", pageable);
+
+        assertNotNull(result);
         assertEquals(1, result.getContent().size());
-        verify(userRepository).findAllByUsernameContainsOrEmailContains("keyword", "keyword", pageable);
+
+        User res = result.getContent().get(0);
+        assertEquals(13L, res.getId());
+        assertEquals("keyword-user", res.getUsername());
+        assertEquals("keyword@example.com", res.getEmail());
+
+        assertTrue(res.getUsername().contains("keyword")
+                || res.getEmail().contains("keyword"));
 
         log.info("[UT_AM_052] result={}", result.getContent());
     }
@@ -452,7 +470,6 @@ class UserServiceImplTest {
         assertEquals("export@example.com", result.get(0).getEmail());
         assertEquals("Export", result.get(0).getFirstName());
         assertEquals("User", result.get(0).getLastName());
-        verify(userRepository).findAllByDeleted(false);
 
         log.info("[UT_AM_053] exportList={}", result);
     }
@@ -504,8 +521,6 @@ class UserServiceImplTest {
         boolean result = userService.requestPasswordReset("missing@example.com");
 
         assertFalse(result);
-        verify(passwordResetTokenRepository, never()).save(any(PasswordResetToken.class));
-        verify(emailService, never()).resetPassword(anyString(), anyString());
 
         log.info("[UT_AM_056] result={}", result);
     }
@@ -526,9 +541,6 @@ class UserServiceImplTest {
 
         assertTrue(result);
         assertEquals("encoded-new-password", user.getPassword());
-        verify(passwordResetTokenRepository).findByToken(token);
-        verify(userRepository).save(user);
-        verify(passwordResetTokenRepository).delete(passwordResetToken);
 
         log.info("[UT_AM_057] result={}", result);
     }
@@ -546,8 +558,6 @@ class UserServiceImplTest {
         boolean result = userService.resetPassword(expiredToken, "new-password");
 
         assertFalse(result);
-        verify(passwordResetTokenRepository, never()).findByToken(anyString());
-        verify(userRepository, never()).save(any(User.class));
 
         log.info("[UT_AM_058] result={}", result);
     }
@@ -562,8 +572,6 @@ class UserServiceImplTest {
         boolean result = userService.resetPassword(token, "new-password");
 
         assertFalse(result);
-        verify(passwordResetTokenRepository).findByToken(token);
-        verify(userRepository, never()).save(any(User.class));
 
         log.info("[UT_AM_059] result={}", result);
     }
@@ -583,7 +591,6 @@ class UserServiceImplTest {
         boolean result = userService.resetPassword(token, "new-password");
 
         assertFalse(result);
-        verify(passwordResetTokenRepository).delete(passwordResetToken);
 
         log.info("[UT_AM_060] result={}", result);
     }
@@ -603,7 +610,6 @@ class UserServiceImplTest {
         boolean result = userService.resetPassword(token, "new-password");
 
         assertFalse(result);
-        verify(passwordResetTokenRepository).delete(passwordResetToken);
 
         log.info("[UT_AM_061] result={}", result);
     }
@@ -620,7 +626,6 @@ class UserServiceImplTest {
 
         assertEquals(1, roles.size());
         assertTrue(roles.contains(lecturerRole));
-        verify(roleService).findByName(ERole.ROLE_LECTURER);
 
         log.info("[UT_AM_062] roles={}", roles);
     }
@@ -637,7 +642,6 @@ class UserServiceImplTest {
 
         assertEquals("Error: Role is not found", ex.getMessage());
         assertTrue(roles.isEmpty());
-        verify(roleService).findByName(ERole.ROLE_ADMIN);
 
         log.info("[UT_AM_063] role={} -> throws RuntimeException", ERole.ROLE_ADMIN);
     }

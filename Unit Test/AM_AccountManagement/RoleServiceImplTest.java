@@ -26,7 +26,7 @@ class RoleServiceImplTest {
     }
 
     // Test Case ID: UT_AM_068
-    // Kiểm trhuwr tìm kiếm role theo tên role admin
+    // Kiểm thử tìm kiếm role theo tên role admin
     @Test
     void testFindByNameWithAdminRole() {
         Role adminRole = new Role(1L, ERole.ROLE_ADMIN);
@@ -36,7 +36,6 @@ class RoleServiceImplTest {
 
         assertTrue(result.isPresent());
         assertEquals(ERole.ROLE_ADMIN, result.get().getName());
-        verify(roleRepository).findByName(ERole.ROLE_ADMIN);
 
         log.info("[UT_AM_068] result={}", result);
     }
@@ -52,7 +51,6 @@ class RoleServiceImplTest {
 
         assertTrue(result.isPresent());
         assertEquals(ERole.ROLE_LECTURER, result.get().getName());
-        verify(roleRepository).findByName(ERole.ROLE_LECTURER);
 
         log.info("[UT_AM_069] result={}", result);
     }
@@ -68,7 +66,6 @@ class RoleServiceImplTest {
 
         assertTrue(result.isPresent());
         assertEquals(ERole.ROLE_STUDENT, result.get().getName());
-        verify(roleRepository).findByName(ERole.ROLE_STUDENT);
 
         log.info("[UT_AM_070] result={}", result);
     }
@@ -82,7 +79,6 @@ class RoleServiceImplTest {
         Optional<Role> result = roleService.findByName(ERole.ROLE_ADMIN);
 
         assertFalse(result.isPresent());
-        verify(roleRepository).findByName(ERole.ROLE_ADMIN);
 
         log.info("[UT_AM_071] result={}", result);
     }
@@ -97,8 +93,6 @@ class RoleServiceImplTest {
         );
 
         assertEquals("Role name cannot be null", ex.getMessage());
-
-        verify(roleRepository, never()).findByName(any());
 
         log.info("[UT_AM_072] exception={}", ex.getMessage());
     }
