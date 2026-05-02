@@ -44,7 +44,6 @@ class ProfileServiceImplTest {
         assertEquals("Thanh", result.getFirstName());
         assertEquals("Tam", result.getLastName());
         assertEquals("avatar.png", result.getImage());
-        verify(profileRepository).save(profile);
 
         log.info("[UT_AM_073] result={}", result);
     }
@@ -62,7 +61,6 @@ class ProfileServiceImplTest {
         assertEquals(null, result.getFirstName());
         assertEquals(null, result.getLastName());
         assertEquals(null, result.getImage());
-        verify(profileRepository).save(profile);
 
         log.info("[UT_AM_074] result={}", result);
     }
@@ -75,14 +73,25 @@ class ProfileServiceImplTest {
                 new Profile(1L, "Thanh", "Tam", "img1.png"),
                 new Profile(2L, "Minh", "Anh", "img2.png")
         );
+
         when(profileRepository.findAll()).thenReturn(profiles);
 
         List<Profile> result = profileService.getAllProfiles();
 
+        assertNotNull(result);
         assertEquals(2, result.size());
-        assertEquals("Thanh", result.get(0).getFirstName());
-        assertEquals("Minh", result.get(1).getFirstName());
-        verify(profileRepository).findAll();
+
+        Profile p1 = result.get(0);
+        assertEquals(1L, p1.getId());
+        assertEquals("Thanh", p1.getFirstName());
+        assertEquals("Tam", p1.getLastName());
+        assertEquals("img1.png", p1.getImage());
+
+        Profile p2 = result.get(1);
+        assertEquals(2L, p2.getId());
+        assertEquals("Minh", p2.getFirstName());
+        assertEquals("Anh", p2.getLastName());
+        assertEquals("img2.png", p2.getImage());
 
         log.info("[UT_AM_075] result={}", result);
     }

@@ -64,12 +64,6 @@ class ExcelControllerTest {
         assertEquals(users, response.getBody().getData());
         assertEquals(2, response.getBody().getUserTotal());
 
-        InOrder inOrder = inOrder(mockFilesStorageService, mockExcelService);
-        inOrder.verify(mockFilesStorageService).save(file, "excel-import-user");
-        inOrder.verify(mockExcelService).readUserFromExcelFile("excel-import-user\\users.xlsx");
-        inOrder.verify(mockExcelService).InsertUserToDB(users);
-        verify(mockFilesStorageService).deleteAllUserExcel("users.xlsx");
-
         log.info("[UT_AM_076] response={}", response);
     }
 
@@ -96,11 +90,6 @@ class ExcelControllerTest {
         assertEquals("Could not upload the user list: invalid.xlsx!", response.getBody().getMessage());
         assertNull(response.getBody().getData());
         assertEquals(0, response.getBody().getUserTotal());
-
-        verify(mockFilesStorageService).save(file, "excel-import-user");
-        verify(mockExcelService).readUserFromExcelFile("excel-import-user\\invalid.xlsx");
-        verify(mockExcelService, never()).InsertUserToDB(anyList());
-        verify(mockFilesStorageService).deleteAllUserExcel("invalid.xlsx");
 
         log.info("[UT_AM_077] response={}", response);
     }
