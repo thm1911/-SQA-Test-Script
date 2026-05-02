@@ -1,60 +1,42 @@
-package com.thanhtam.backend.exam;
+package com.thanhtam.backend.controller;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
+import com.amazonaws.services.workdocs.model.EntityNotExistsException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.thanhtam.backend.controller.ExamController;
 import com.thanhtam.backend.dto.*;
 import com.thanhtam.backend.entity.*;
 import com.thanhtam.backend.service.*;
 import com.thanhtam.backend.ultilities.DifficultyLevel;
-import com.thanhtam.backend.ultilities.EQTypeCode;
 import com.thanhtam.backend.ultilities.ERole;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.InjectMocks;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
-import org.mockito.Spy;
-import org.mockito.junit.MockitoJUnitRunner;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.junit.jupiter.api.DisplayName;
 
+import javax.persistence.EntityNotFoundException;
 import java.io.IOException;
 import java.text.ParseException;
 import java.util.*;
 
-import static org.junit.Assert.*;
-import static org.mockito.ArgumentMatchers.*;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-/**
- * ============================================================================
- * Unit Test cho ExamController - Tầng Controller quản lý bài kiểm tra
- * ============================================================================
- * Mô tả: Test các API endpoint của ExamController bao gồm:
- *         - CRUD bài kiểm tra (tạo, xem, hủy)
- *         - Quản lý câu hỏi trong bài thi
- *         - Lấy kết quả bài thi
- *         - Lưu câu trả lời của user
- *         - Lịch thi
- * Phương pháp: Sử dụng Mockito để mock Service layer
- * Rollback: Mock-based. @Before/@After reset state giữa các test.
- * ============================================================================
- */
-@RunWith(MockitoJUnitRunner.class)
+@ExtendWith(MockitoExtension.class)
 public class ExamControllerTest {
-
-    private static final Logger logger = LoggerFactory.getLogger(ExamControllerTest.class);
 
     @Mock
     private ExamService examService;
@@ -74,1256 +56,3138 @@ public class ExamControllerTest {
     @Mock
     private ExamUserService examUserService;
 
-    @Spy
-    private ObjectMapper mapper = new ObjectMapper();
-
-    @InjectMocks
+    private ObjectMapper mapper;
     private ExamController examController;
 
-    // ============ Test Data ============
-    private Exam sampleExam;
-    private User adminUser;
-    private User lecturerUser;
-    private User studentUser;
-    private Intake sampleIntake;
-    private Part samplePart;
-    private Course sampleCourse;
-    private ExamUser sampleExamUser;
-    private Question sampleQuestion;
-    private QuestionType questionTypeMC;
-    private Role adminRole;
-    private Role lecturerRole;
-    private Role studentRole;
-
-    @Before
+    @BeforeEach
     public void setUp() {
-        logger.info("========================================");
-        logger.info("[SETUP] Khởi tạo dữ liệu test ExamController...");
+        mapper = new ObjectMapper();
+        examController = new ExamController(
+                examService,
+                questionService,
+                userService,
+                intakeService,
+                partService,
+                examUserService,
+                mapper
+        );
 
-        // Roles
-        adminRole = new Role();
-        adminRole.setId(1L);
-        adminRole.setName(ERole.ROLE_ADMIN);
-
-        lecturerRole = new Role();
-        lecturerRole.setId(2L);
-        lecturerRole.setName(ERole.ROLE_LECTURER);
-
-        studentRole = new Role();
-        studentRole.setId(3L);
-        studentRole.setName(ERole.ROLE_STUDENT);
-
-        // Course & Part & Intake
-        sampleCourse = new Course();
-        sampleCourse.setId(1L);
-        sampleCourse.setCourseCode("CS101");
-        sampleCourse.setName("Lập trình Java");
-
-        samplePart = new Part();
-        samplePart.setId(1L);
-        samplePart.setName("Chương 1 - Tổng quan");
-        samplePart.setCourse(sampleCourse);
-
-        sampleIntake = new Intake();
-        sampleIntake.setId(1L);
-        sampleIntake.setName("Khóa 2024");
-        sampleIntake.setIntakeCode("K2024");
-
-        // Users
-        adminUser = new User();
-        adminUser.setId(1L);
-        adminUser.setUsername("admin");
-        adminUser.setEmail("admin@ptit.edu.vn");
-        adminUser.setRoles(new HashSet<>(Collections.singletonList(adminRole)));
-
-        lecturerUser = new User();
-        lecturerUser.setId(2L);
-        lecturerUser.setUsername("lecturer01");
-        lecturerUser.setEmail("lecturer01@ptit.edu.vn");
-        lecturerUser.setRoles(new HashSet<>(Collections.singletonList(lecturerRole)));
-
-        studentUser = new User();
-        studentUser.setId(3L);
-        studentUser.setUsername("student01");
-        studentUser.setEmail("student01@ptit.edu.vn");
-        studentUser.setRoles(new HashSet<>(Collections.singletonList(studentRole)));
-        studentUser.setIntake(sampleIntake);
-
-        // Question Type
-        questionTypeMC = new QuestionType();
-        questionTypeMC.setId(1L);
-        questionTypeMC.setTypeCode(EQTypeCode.MC);
-        questionTypeMC.setDescription("Multiple Choice");
-
-        // Question
-        sampleQuestion = new Question();
-        sampleQuestion.setId(1L);
-        sampleQuestion.setQuestionText("Kiểu dữ liệu nào sau đây là kiểu nguyên thủy?");
-        sampleQuestion.setQuestionType(questionTypeMC);
-        sampleQuestion.setDifficultyLevel(DifficultyLevel.EASY);
-        sampleQuestion.setPoint(10);
-        sampleQuestion.setPart(samplePart);
-
-        Choice c1 = new Choice(1L, "int", 1);
-        Choice c2 = new Choice(2L, "String", 0);
-        sampleQuestion.setChoices(Arrays.asList(c1, c2));
-
-        // Exam
-        sampleExam = new Exam();
-        sampleExam.setId(1L);
-        sampleExam.setTitle("Kiểm tra giữa kỳ Java - K2024");
-        sampleExam.setIntake(sampleIntake);
-        sampleExam.setPart(samplePart);
-        sampleExam.setShuffle(false);
-        sampleExam.setCanceled(false);
-        sampleExam.setDurationExam(60);
-        sampleExam.setBeginExam(new Date(System.currentTimeMillis() - 1800000)); // 30 phút trước
-        sampleExam.setFinishExam(new Date(System.currentTimeMillis() + 1800000)); // 30 phút sau
-        sampleExam.setQuestionData("[{\"questionId\":1,\"point\":10}]");
-
-        // ExamUser
-        sampleExamUser = new ExamUser();
-        sampleExamUser.setId(1L);
-        sampleExamUser.setExam(sampleExam);
-        sampleExamUser.setUser(studentUser);
-        sampleExamUser.setIsStarted(false);
-        sampleExamUser.setIsFinished(false);
-        sampleExamUser.setRemainingTime(3600);
-        sampleExamUser.setTotalPoint(-1.0);
-
-        logger.info("[SETUP] Hoàn tất khởi tạo dữ liệu test.");
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
-        logger.info("[TEARDOWN] Dọn dẹp dữ liệu test ExamController...");
-        reset(examService, questionService, userService, intakeService, partService, examUserService);
         SecurityContextHolder.clearContext();
-        sampleExam = null;
-        adminUser = null;
-        lecturerUser = null;
-        studentUser = null;
-        sampleIntake = null;
-        samplePart = null;
-        sampleCourse = null;
-        sampleExamUser = null;
-        sampleQuestion = null;
-        logger.info("[TEARDOWN] Hoàn tất dọn dẹp. Trạng thái đã được khôi phục.");
-        logger.info("========================================\n");
     }
 
-    // ========================================================================================
-    // TEST CASES CHO getExamsByPage() - API: GET /api/exams
-    // ========================================================================================
-
-    /**
-     * UT_EM_001: Admin lấy danh sách tất cả exam phân trang
-     * Mô tả: Admin có quyền xem tất cả exam, không bị giới hạn bởi người tạo
-     * Input: Admin user, Pageable(page=0, size=10)
-     * Expected: Trả về PageResult chứa tất cả exams
-     */
     @Test
-    public void UT_EM_001_getExamsByPage_asAdmin_shouldReturnAllExams() {
-        logger.info("[UT_EM_001] BẮT ĐẦU: Admin lấy danh sách tất cả exam");
-
-        // Arrange
+    @DisplayName("UM_EM_001: Trường hợp user là admin --> trả về toàn bộ exam ")
+    public void getExamByPage_forAdmin() {
+        String username = "admin1";
         Pageable pageable = PageRequest.of(0, 10);
-        Page<Exam> examPage = new PageImpl<>(Arrays.asList(sampleExam), pageable, 1);
 
-        when(userService.getUserName()).thenReturn("admin");
-        when(userService.getUserByUsername("admin")).thenReturn(Optional.of(adminUser));
-        when(examService.findAll(pageable)).thenReturn(examPage);
-        when(examService.findAllByCreatedBy_Username(pageable, "admin"))
-            .thenReturn(new PageImpl<>(Collections.emptyList(), pageable, 0));
-        logger.info("[UT_EM_001] Input: user=admin, Pageable(page=0, size=10)");
+        //arrange
+        when(userService.getUserName()).thenReturn(username);
+        when(userService.getUserByUsername(username)).thenReturn(Optional.of(userWithRoles(ERole.ROLE_ADMIN)));
 
-        // Act
+        Page<Exam> allPage = new PageImpl<>(Arrays.asList(new Exam(), new Exam()), pageable, 2);
+        Page<Exam> ownPage = new PageImpl<>(Arrays.asList(new Exam()), pageable, 1);
+
+        when(examService.findAll(pageable)).thenReturn(allPage);
+        when(examService.findAllByCreatedBy_Username(pageable, username)).thenReturn(ownPage);
+
+        //act
         PageResult result = examController.getExamsByPage(pageable);
 
-        // Assert
-        assertNotNull("Kết quả không được null", result);
-        assertNotNull("Data không được null", result.getData());
-        assertEquals("Phải có 1 exam", 1, result.getData().size());
-
-        verify(examService, times(1)).findAll(pageable);
-        verify(examService, never()).findAllByCreatedBy_Username(any(), any());
-        logger.info("[UT_EM_001] KẾT QUẢ: PASSED - Admin thấy tất cả {} exams", result.getData().size());
+        //assert
+        assertEquals(2, result.getData().size());
+        verify(examService).findAll(pageable);
     }
 
-    /**
-     * UT_EM_002: Lecturer chỉ thấy exam do mình tạo
-     * Mô tả: Lecturer bị giới hạn chỉ thấy các exam do chính mình tạo
-     * Input: Lecturer user, Pageable(page=0, size=10)
-     * Expected: Chỉ trả về exams tạo bởi lecturer đó
-     */
     @Test
-    public void UT_EM_002_getExamsByPage_asLecturer_shouldReturnOwnExams() {
-        logger.info("[UT_EM_002] BẮT ĐẦU: Lecturer chỉ thấy exam do mình tạo");
-
-        // Arrange
+    @DisplayName("UM_EM_002: Trường hợp user là lecture --> trả về những exam mà lecture đã tạo ")
+    public void getExamByPage_forLecture() {
+        String username = "lecture1";
         Pageable pageable = PageRequest.of(0, 10);
-        Page<Exam> examPage = new PageImpl<>(Arrays.asList(sampleExam), pageable, 1);
 
-        when(userService.getUserName()).thenReturn("lecturer01");
-        when(userService.getUserByUsername("lecturer01")).thenReturn(Optional.of(lecturerUser));
-        when(examService.findAllByCreatedBy_Username(pageable, "lecturer01")).thenReturn(examPage);
-        logger.info("[UT_EM_002] Input: user=lecturer01, Pageable(page=0, size=10)");
+        //arrange
+        when(userService.getUserName()).thenReturn(username);
+        when(userService.getUserByUsername(username)).thenReturn(Optional.of(userWithRoles(ERole.ROLE_LECTURER)));
 
-        // Act
+        Page<Exam> ownPage = new PageImpl<>(Arrays.asList(new Exam(), new Exam()), pageable, 2);
+
+        when(examService.findAllByCreatedBy_Username(pageable, username)).thenReturn(ownPage);
+
+        //act
         PageResult result = examController.getExamsByPage(pageable);
 
-        // Assert
-        assertNotNull("Kết quả không được null", result);
-        assertEquals("Phải có 1 exam", 1, result.getData().size());
-
-        verify(examService, never()).findAll(pageable);
-        verify(examService, times(1)).findAllByCreatedBy_Username(pageable, "lecturer01");
-        logger.info("[UT_EM_002] KẾT QUẢ: PASSED - Lecturer chỉ thấy exam của mình");
+        //assert
+        assertEquals(2, result.getData().size());
+        verify(examService).findAllByCreatedBy_Username(pageable, username);
     }
 
-    // ========================================================================================
-    // TEST CASES CHO getExamById() - API: GET /api/exams/{id}
-    // ========================================================================================
-
-    /**
-     * UT_EM_003: Lấy chi tiết exam theo ID - tồn tại
-     * Mô tả: Kiểm tra lấy thông tin chi tiết của 1 exam bằng ID
-     * Input: examId = 1
-     * Expected: ResponseEntity(200) chứa Exam
-     */
     @Test
-    public void UT_EM_003_getExamById_existingId_shouldReturn200() {
-        logger.info("[UT_EM_003] BẮT ĐẦU: Lấy chi tiết exam theo ID - tồn tại");
-        logger.info("[UT_EM_003] Input: examId={}", 1L);
+    @DisplayName("UM_EM_003: Trường hợp username là null --> trả về NullPointerException")
+    public void getExamByPage_usernameIsNull() {
+        String username = null;
+        Pageable pageable = PageRequest.of(0, 10);
 
-        // Arrange
-        when(examService.getExamById(1L)).thenReturn(Optional.of(sampleExam));
+        assertThrows(NullPointerException.class, () -> examController.getExamsByPage(pageable));
 
-        // Act
-        ResponseEntity<Exam> response = examController.getExamById(1L);
-
-        // Assert
-        assertNotNull("Response không được null", response);
-        assertEquals("Status phải là 200 OK", HttpStatus.OK, response.getStatusCode());
-        assertNotNull("Body không được null", response.getBody());
-        assertEquals("Exam title phải khớp", sampleExam.getTitle(), response.getBody().getTitle());
-
-        logger.info("[UT_EM_003] KẾT QUẢ: PASSED - Trả về Exam ID={}", response.getBody().getId());
     }
 
-    /**
-     * UT_EM_004: Lấy chi tiết exam theo ID - không tồn tại
-     * Mô tả: Kiểm tra khi ID không có trong DB
-     * Input: examId = 999
-     * Expected: ResponseEntity(204 NO_CONTENT), không ném exception
-     */
     @Test
-    public void UT_EM_004_getExamById_nonExistingId_shouldReturnNoContentWithoutThrowing() {
-        logger.info("[UT_EM_004] BẮT ĐẦU: Lấy chi tiết exam theo ID - không tồn tại");
-        logger.info("[UT_EM_004] Input: examId={}", 999L);
+    @DisplayName("UM_EM_004: Trường hợp user không tồn tại --> trả về EntityNotExistsException>")
+    public void getExamByPage_userNotExisted() {
+        String username = "userNotFound";
+        Pageable pageable = PageRequest.of(0, 10);
 
-        // Arrange
-        when(examService.getExamById(999L)).thenReturn(Optional.empty());
+        when(userService.getUserName()).thenReturn(username);
 
-        // Act
-        ResponseEntity<Exam> response = null;
-        try {
-            response = examController.getExamById(999L);
-        } catch (NoSuchElementException ex) {
-            fail("Controller không được ném NoSuchElementException khi exam không tồn tại");
-        }
+        assertThrows(EntityNotExistsException.class, () -> examController.getExamsByPage(pageable));
 
-        // Assert
-        assertNotNull("Response không được null", response);
-        assertEquals("Status phải là 204 NO_CONTENT", HttpStatus.NO_CONTENT, response.getStatusCode());
-        assertNull("Body phải null khi không tồn tại", response.getBody());
-
-        logger.info("[UT_EM_004] KẾT QUẢ: PASSED - Trả về 204 NO_CONTENT");
     }
 
-    // ========================================================================================
-    // TEST CASES CHO createExam() - API: POST /api/exams
-    // ========================================================================================
-
-    /**
-     * UT_EM_005: Tạo bài kiểm tra mới thành công
-     * Mô tả: Kiểm tra tạo exam với đầy đủ thông tin hợp lệ
-     * Input: Exam object, intakeId=1, partId=1, isShuffle=false
-     * Expected: ResponseEntity(200) chứa Exam đã tạo
-     */
     @Test
-    public void UT_EM_005_createExam_withValidData_shouldReturn200() throws Exception {
-        logger.info("[UT_EM_005] BẮT ĐẦU: Tạo bài kiểm tra mới thành công");
-
-        // Arrange
-        when(userService.getUserName()).thenReturn("lecturer01");
-        when(userService.getUserByUsername("lecturer01")).thenReturn(Optional.of(lecturerUser));
-        when(intakeService.findById(1L)).thenReturn(Optional.of(sampleIntake));
-        when(partService.findPartById(1L)).thenReturn(Optional.of(samplePart));
-        when(examService.saveExam(any(Exam.class))).thenReturn(sampleExam);
-        when(userService.findAllByIntakeId(1L)).thenReturn(Arrays.asList(studentUser));
-
-        logger.info("[UT_EM_005] Input: Exam(title='{}'), intakeId=1, partId=1, shuffle=false",
-                sampleExam.getTitle());
-
-        // Act
-        ResponseEntity<?> response = examController.createExam(sampleExam, 1L, 1L, false, false);
-
-        // Assert
-        assertNotNull("Response không được null", response);
-        assertEquals("Status phải là 200 OK", HttpStatus.OK, response.getStatusCode());
-
-        verify(examService, times(1)).saveExam(any(Exam.class));
-        verify(examUserService, times(1)).create(any(Exam.class), anyList());
-        logger.info("[UT_EM_005] KẾT QUẢ: PASSED - Exam được tạo thành công");
-    }
-
-    /**
-     * UT_EM_006: Tạo bài kiểm tra với shuffle = true
-     * Mô tả: Kiểm tra tạo exam có bật chế độ xáo trộn câu hỏi
-     * Input: Exam object, isShuffle = true
-     * Expected: ResponseEntity(200), exam.isShuffle = true
-     */
-    @Test
-    public void UT_EM_006_createExam_withShuffle_shouldCreateWithShuffle() throws Exception {
-        logger.info("[UT_EM_006] BẮT ĐẦU: Tạo bài kiểm tra với shuffle = true");
-
-        // Arrange
-        sampleExam.setShuffle(true);
-        when(userService.getUserName()).thenReturn("lecturer01");
-        when(userService.getUserByUsername("lecturer01")).thenReturn(Optional.of(lecturerUser));
-        when(intakeService.findById(1L)).thenReturn(Optional.of(sampleIntake));
-        when(partService.findPartById(1L)).thenReturn(Optional.of(samplePart));
-        when(examService.saveExam(any(Exam.class))).thenReturn(sampleExam);
-        when(userService.findAllByIntakeId(1L)).thenReturn(Arrays.asList(studentUser));
-
-        logger.info("[UT_EM_006] Input: isShuffle=true");
-
-        // Act
-        ResponseEntity<?> response = examController.createExam(sampleExam, 1L, 1L, true, false);
-
-        // Assert
-        assertEquals("Status phải là 200 OK", HttpStatus.OK, response.getStatusCode());
-
-        verify(examService, times(1)).saveExam(any(Exam.class));
-        logger.info("[UT_EM_006] KẾT QUẢ: PASSED - Exam shuffle được tạo");
-    }
-
-    /**
-     * UT_EM_007: Tạo bài kiểm tra khi intake không tồn tại
-     * Mô tả: Kiểm tra khi intakeId không hợp lệ (intake không tìm thấy)
-     * Input: intakeId = 999 (không tồn tại)
-     * Expected: Service phải từ chối tạo exam và không được persist dữ liệu
-     */
-    @Test
-    public void UT_EM_007_createExam_withInvalidIntake_shouldRejectAndNotCreate() throws Exception {
-        logger.info("[UT_EM_007] BẮT ĐẦU: Tạo exam với intake không tồn tại");
-
-        // Arrange
-        sampleExam.setIntake(null);
-        when(userService.getUserName()).thenReturn("lecturer01");
-        when(userService.getUserByUsername("lecturer01")).thenReturn(Optional.of(lecturerUser));
-        when(intakeService.findById(999L)).thenReturn(Optional.empty());
-        when(partService.findPartById(1L)).thenReturn(Optional.of(samplePart));
-
-        logger.info("[UT_EM_007] Input: intakeId=999 (không tồn tại)");
-
-        // Act
-        ResponseEntity<?> response = examController.createExam(sampleExam, 999L, 1L, false, false);
-
-        // Assert
-        assertTrue("Status phải là mã lỗi (4xx/5xx) khi intake không tồn tại",
-                response.getStatusCode().is4xxClientError() || response.getStatusCode().is5xxServerError());
-        verify(examService, never()).saveExam(any(Exam.class));
-        verify(examUserService, never()).create(any(Exam.class), anyList());
-
-        logger.info("[UT_EM_007] KẾT QUẢ: PASSED - Intake không hợp lệ bị từ chối, exam không được tạo");
-    }
-
-    // ========================================================================================
-    // TEST CASES CHO getExamUserById() - API: GET /api/exams/exam-user/{examId}
-    // ========================================================================================
-
-    /**
-     * UT_EM_008: Lấy exam-user bằng examId - tồn tại
-     * Mô tả: Kiểm tra lấy quan hệ Exam-User theo examId cho user hiện tại
-     * Input: examId=1, current user=student01
-     * Expected: ResponseEntity(200) chứa ExamUser
-     */
-    @Test
-    public void UT_EM_008_getExamUserById_exists_shouldReturn200() throws ParseException {
-        logger.info("[UT_EM_008] BẮT ĐẦU: Lấy exam-user bằng examId - tồn tại");
-        logger.info("[UT_EM_008] Input: examId={}, user='{}'", 1L, "student01");
-
-        // Arrange
-        when(userService.getUserName()).thenReturn("student01");
-        when(examUserService.findByExamAndUser(1L, "student01")).thenReturn(sampleExamUser);
-
-        // Act
-        ResponseEntity<ExamUser> response = examController.getExamUserById(1L);
-
-        // Assert
-        assertNotNull("Response không được null", response);
-        assertEquals("Status phải là 200 OK", HttpStatus.OK, response.getStatusCode());
-        assertNotNull("Body chứa ExamUser", response.getBody());
-        assertEquals("ExamUser ID khớp", Long.valueOf(1L), response.getBody().getId());
-
-        logger.info("[UT_EM_008] KẾT QUẢ: PASSED - ExamUser tìm thấy");
-    }
-
-    /**
-     * UT_EM_009: Lấy exam-user bằng examId - không tồn tại
-     * Mô tả: Kiểm tra khi không tìm thấy quan hệ Exam-User
-     * Input: examId=999, current user=student01
-     * Expected: ResponseEntity(404 NOT_FOUND)
-     */
-    @Test
-    public void UT_EM_009_getExamUserById_notExists_shouldReturn404() throws ParseException {
-        logger.info("[UT_EM_009] BẮT ĐẦU: Lấy exam-user - không tồn tại");
-        logger.info("[UT_EM_009] Input: examId={}, user='{}'", 999L, "student01");
-
-        // Arrange
-        when(userService.getUserName()).thenReturn("student01");
-        when(examUserService.findByExamAndUser(999L, "student01")).thenReturn(null);
-
-        // Act
-        ResponseEntity<ExamUser> response = examController.getExamUserById(999L);
-
-        // Assert
-        assertNotNull("Response không được null", response);
-        assertEquals("Status phải là 404 NOT_FOUND", HttpStatus.NOT_FOUND, response.getStatusCode());
-
-        logger.info("[UT_EM_009] KẾT QUẢ: PASSED - Trả về 404 NOT_FOUND");
-    }
-
-    // ========================================================================================
-    // TEST CASES CHO cancelExam() - API: GET /api/exams/{id}/cancel
-    // ========================================================================================
-
-    /**
-     * UT_EM_010: Hủy bài kiểm tra - exam chưa bắt đầu
-     * Mô tả: Kiểm tra hủy exam khi thời gian bắt đầu chưa tới
-     * Input: examId=1, exam.beginExam > now
-     * Expected: examService.cancelExam() được gọi
-     */
-    @Test
-    public void UT_EM_010_cancelExam_beforeBegin_shouldCancel() {
-        logger.info("[UT_EM_010] BẮT ĐẦU: Hủy exam - chưa bắt đầu");
-
-        // Arrange - exam bắt đầu trong tương lai
-        sampleExam.setBeginExam(new Date(System.currentTimeMillis() + 86400000)); // 1 ngày sau
-        when(userService.getUserName()).thenReturn("lecturer01");
-        when(userService.getUserByUsername("lecturer01")).thenReturn(Optional.of(lecturerUser));
-        when(examService.getExamById(1L)).thenReturn(Optional.of(sampleExam));
-        logger.info("[UT_EM_010] Input: examId=1, beginExam > now");
-
-        // Act
-        examController.cancelExam(1L);
-
-        // Assert
-        verify(examService, times(1)).cancelExam(1L);
-        logger.info("[UT_EM_010] KẾT QUẢ: PASSED - Exam đã bị hủy");
-    }
-
-    /**
-     * UT_EM_011: Hủy bài kiểm tra - exam đã bắt đầu
-     * Mô tả: Kiểm tra hành vi khi hủy exam đã bắt đầu
-     * Input: examId=1, exam.beginExam < now
-     * Expected: examService.cancelExam() KHÔNG được gọi
-     */
-    @Test
-    public void UT_EM_011_cancelExam_afterBegin_shouldNotCancel() {
-        logger.info("[UT_EM_011] BẮT ĐẦU: Hủy exam - đã bắt đầu");
-
-        // Arrange - exam đã bắt đầu
-        sampleExam.setBeginExam(new Date(System.currentTimeMillis() - 3600000)); // 1h trước
-        when(userService.getUserName()).thenReturn("lecturer01");
-        when(userService.getUserByUsername("lecturer01")).thenReturn(Optional.of(lecturerUser));
-        when(examService.getExamById(1L)).thenReturn(Optional.of(sampleExam));
-        logger.info("[UT_EM_011] Input: examId=1, beginExam < now (đã bắt đầu)");
-
-        // Act
-        examController.cancelExam(1L);
-
-        // Assert
-        verify(examService, never()).cancelExam(anyLong());
-        logger.info("[UT_EM_011] KẾT QUẢ: PASSED - Exam đã bắt đầu không bị hủy");
-    }
-
-    // ========================================================================================
-    // TEST CASES CHO getResultExam() - API: GET /api/exams/{examId}/result
-    // ========================================================================================
-
-    /**
-     * UT_EM_012: Lấy kết quả bài thi - exam tồn tại
-     * Mô tả: Kiểm tra lấy kết quả bài thi khi exam tồn tại trong DB
-     * Input: examId=1, current user=student01
-     * Expected: ResponseEntity(200) chứa ExamResult
-     */
-    @Test
-    public void UT_EM_012_getResultExam_examExists_shouldReturn200() throws IOException {
-        logger.info("[UT_EM_012] BẮT ĐẦU: Lấy kết quả bài thi - exam tồn tại");
-        logger.info("[UT_EM_012] Input: examId={}", 1L);
-
-        // Arrange
-        when(userService.getUserName()).thenReturn("student01");
-        when(examService.getExamById(1L)).thenReturn(Optional.of(sampleExam));
-
-        ExamUser finishedExamUser = new ExamUser();
-        finishedExamUser.setExam(sampleExam);
-        finishedExamUser.setUser(studentUser);
-        finishedExamUser.setIsFinished(true);
-        finishedExamUser.setTotalPoint(-1.0);
-
-        // Giả lập answerSheet đã có
-        Choice userChoice = new Choice(1L, "int", 1);
-        AnswerSheet as = new AnswerSheet(1L, Arrays.asList(userChoice), 10);
-        String answerJson = mapper.writeValueAsString(Arrays.asList(as));
-        finishedExamUser.setAnswerSheet(answerJson);
-
-        when(examUserService.findByExamAndUser(1L, "student01")).thenReturn(finishedExamUser);
-
-        // Mock choice list
-        ChoiceList choiceList = new ChoiceList();
-        choiceList.setQuestion(sampleQuestion);
-        choiceList.setPoint(10);
-        choiceList.setIsSelectedCorrected(true);
-        when(examService.getChoiceList(anyList(), anyList())).thenReturn(Arrays.asList(choiceList));
-
-        // Act
-        ResponseEntity response = examController.getResultExam(1L);
-
-        // Assert
-        assertNotNull("Response không được null", response);
-        assertEquals("Status phải là 200 OK", HttpStatus.OK, response.getStatusCode());
-        assertNotNull("Body chứa ExamResult", response.getBody());
-        assertTrue("Body phải là ExamResult", response.getBody() instanceof ExamResult);
-
-        ExamResult result = (ExamResult) response.getBody();
-        assertEquals("TotalPoint phải = 10.0", Double.valueOf(10.0), result.getTotalPoint());
-
-        logger.info("[UT_EM_012] KẾT QUẢ: PASSED - Kết quả bài thi: totalPoint={}", result.getTotalPoint());
-    }
-
-    /**
-     * UT_EM_013: Lấy kết quả bài thi - exam không tồn tại
-     * Mô tả: Kiểm tra khi examId không hợp lệ
-     * Input: examId=999
-     * Expected: ResponseEntity(404 NOT_FOUND)
-     */
-    @Test
-    public void UT_EM_013_getResultExam_examNotExists_shouldReturn404() throws IOException {
-        logger.info("[UT_EM_013] BẮT ĐẦU: Lấy kết quả bài thi - exam không tồn tại");
-        logger.info("[UT_EM_013] Input: examId={}", 999L);
-
-        // Arrange
-        when(userService.getUserName()).thenReturn("student01");
-        when(examService.getExamById(999L)).thenReturn(Optional.empty());
-
-        // Act
-        ResponseEntity response = examController.getResultExam(999L);
-
-        // Assert
-        assertNotNull("Response không được null", response);
-        assertEquals("Status phải là 404 NOT_FOUND", HttpStatus.NOT_FOUND, response.getStatusCode());
-
-        logger.info("[UT_EM_013] KẾT QUẢ: PASSED - Trả về 404 NOT_FOUND");
-    }
-
-    // ========================================================================================
-    // TEST CASES CHO getResultExamAll() - API: GET /api/exams/{examId}/result/all
-    // ========================================================================================
-
-    /**
-     * UT_EM_014: Lấy kết quả tất cả user cho 1 exam - exam không tồn tại
-     * Mô tả: Kiểm tra khi exam không có trong DB
-     * Input: examId=999
-     * Expected: ResponseEntity(404 NOT_FOUND)
-     */
-    @Test
-    public void UT_EM_014_getResultExamAll_examNotExists_shouldReturn404() throws IOException {
-        logger.info("[UT_EM_014] BẮT ĐẦU: Lấy kết quả tất cả user - exam không tồn tại");
-        logger.info("[UT_EM_014] Input: examId={}", 999L);
-
-        // Arrange
-        when(examService.getExamById(999L)).thenReturn(Optional.empty());
-
-        // Act
-        ResponseEntity response = examController.getResultExamAll(999L);
-
-        // Assert
-        assertEquals("Status phải là 404 NOT_FOUND", HttpStatus.NOT_FOUND, response.getStatusCode());
-        logger.info("[UT_EM_014] KẾT QUẢ: PASSED - 404 NOT_FOUND");
-    }
-
-    /**
-     * UT_EM_015: Lấy kết quả tất cả user - exam tồn tại, có users
-     * Mô tả: Kiểm tra kết quả toàn bộ khi có 1 user chưa làm bài
-     * Input: examId=1, 1 user chưa làm bài (answerSheet rỗng)
-        * Expected: ResponseEntity(200), examResult.totalPoint = null, examStatus = 0
-     */
-    @Test
-    public void UT_EM_015_getResultExamAll_withUsersNoAnswer_shouldReturn200() throws IOException {
-        logger.info("[UT_EM_015] BẮT ĐẦU: Lấy kết quả tất cả user - user chưa làm bài");
-
-        // Arrange
-        when(examService.getExamById(1L)).thenReturn(Optional.of(sampleExam));
-
-        ExamUser noAnswerUser = new ExamUser();
-        noAnswerUser.setExam(sampleExam);
-        noAnswerUser.setUser(studentUser);
-        noAnswerUser.setIsStarted(false);
-        noAnswerUser.setIsFinished(false);
-        noAnswerUser.setTotalPoint(-1.0);
-        noAnswerUser.setAnswerSheet(null);
-
-        when(examUserService.findAllByExam_Id(1L)).thenReturn(Arrays.asList(noAnswerUser));
-
-        // Act
-        ResponseEntity response = examController.getResultExamAll(1L);
-
-        // Assert
-        assertEquals("Status phải là 200 OK", HttpStatus.OK, response.getStatusCode());
-        assertNotNull("Body không được null", response.getBody());
-        @SuppressWarnings("unchecked")
-        List<ExamResult> results = (List<ExamResult>) response.getBody();
-        assertEquals("Phải có đúng 1 kết quả", 1, results.size());
-        assertNull("User chưa làm bài phải có totalPoint = null", results.get(0).getTotalPoint());
-        assertEquals("User chưa làm bài phải có examStatus = 0", 0, results.get(0).getExamStatus());
-
-        logger.info("[UT_EM_015] KẾT QUẢ: PASSED - Trả về kết quả cho user chưa làm bài");
-    }
-
-    // ========================================================================================
-    // TEST CASES CHO convertAnswerJsonToObject()
-    // ========================================================================================
-
-    /**
-     * UT_EM_016: Convert JSON answer sheet hợp lệ
-     * Mô tả: Parse JSON answer sheet string thành List<AnswerSheet>
-     * Input: Valid JSON string
-     * Expected: List<AnswerSheet> có dữ liệu đúng
-     */
-    @Test
-    public void UT_EM_016_convertAnswerJsonToObject_validJson_shouldReturnList() throws IOException {
-        logger.info("[UT_EM_016] BẮT ĐẦU: Convert JSON answer sheet hợp lệ");
-
-        // Arrange
-        String json = "[{\"questionId\":1,\"choices\":[{\"id\":1,\"choiceText\":\"True\",\"isCorrected\":1}],\"point\":10}]";
-        sampleExamUser.setAnswerSheet(json);
-        logger.info("[UT_EM_016] Input: JSON = '{}'", json);
-
-        // Act
-        List<AnswerSheet> result = examController.convertAnswerJsonToObject(sampleExamUser);
-
-        // Assert
-        assertNotNull("Kết quả không được null", result);
-        assertEquals("Phải có 1 answer sheet", 1, result.size());
-        assertEquals("QuestionId phải = 1", Long.valueOf(1L), result.get(0).getQuestionId());
-        assertEquals("Point phải = 10", Integer.valueOf(10), result.get(0).getPoint());
-
-        logger.info("[UT_EM_016] KẾT QUẢ: PASSED - JSON parsed thành công");
-    }
-
-    /**
-     * UT_EM_017: Convert answer sheet khi answerSheet null/rỗng
-     * Mô tả: Kiểm tra khi user chưa có answer sheet
-     * Input: ExamUser với answerSheet = null
-     * Expected: List rỗng (emptyList)
-     */
-    @Test
-    public void UT_EM_017_convertAnswerJsonToObject_nullAnswerSheet_shouldReturnEmptyList() throws IOException {
-        logger.info("[UT_EM_017] BẮT ĐẦU: Convert answer sheet null");
-
-        // Arrange
-        sampleExamUser.setAnswerSheet(null);
-        logger.info("[UT_EM_017] Input: answerSheet=null");
-
-        // Act
-        List<AnswerSheet> result = examController.convertAnswerJsonToObject(sampleExamUser);
-
-        // Assert
-        assertNotNull("Kết quả không được null", result);
-        assertTrue("List phải rỗng", result.isEmpty());
-
-        logger.info("[UT_EM_017] KẾT QUẢ: PASSED - Trả về empty list cho null answerSheet");
-    }
-
-    /**
-     * UT_EM_018: Convert answer sheet khi answerSheet rỗng ""
-     * Mô tả: Kiểm tra khi answerSheet là chuỗi rỗng
-     * Input: ExamUser với answerSheet = ""
-     * Expected: List rỗng (emptyList)
-     */
-    @Test
-    public void UT_EM_018_convertAnswerJsonToObject_emptyString_shouldReturnEmptyList() throws IOException {
-        logger.info("[UT_EM_018] BẮT ĐẦU: Convert answer sheet rỗng");
-
-        // Arrange
-        sampleExamUser.setAnswerSheet("");
-        logger.info("[UT_EM_018] Input: answerSheet=''");
-
-        // Act
-        List<AnswerSheet> result = examController.convertAnswerJsonToObject(sampleExamUser);
-
-        // Assert
-        assertNotNull("Kết quả không được null", result);
-        assertTrue("List phải rỗng", result.isEmpty());
-
-        logger.info("[UT_EM_018] KẾT QUẢ: PASSED - Trả về empty list cho empty string");
-    }
-
-    // ========================================================================================
-    // TEST CASES CHO convertQuestionJsonToObject()
-    // ========================================================================================
-
-    /**
-     * UT_EM_019: Convert JSON question data hợp lệ
-     * Mô tả: Parse question data JSON từ Exam thành List<ExamQuestionPoint>
-     * Input: Exam với questionData JSON hợp lệ
-     * Expected: List<ExamQuestionPoint> đúng
-     */
-    @Test
-    public void UT_EM_019_convertQuestionJsonToObject_validJson_shouldReturnList() throws IOException {
-        logger.info("[UT_EM_019] BẮT ĐẦU: Convert question data JSON hợp lệ");
-        logger.info("[UT_EM_019] Input: questionData='{}'", sampleExam.getQuestionData());
-
-        // Act
-        List<ExamQuestionPoint> result = examController.convertQuestionJsonToObject(Optional.of(sampleExam));
-
-        // Assert
-        assertNotNull("Kết quả không được null", result);
-        assertEquals("Phải có 1 question point", 1, result.size());
-        assertEquals("QuestionId phải = 1", Long.valueOf(1L), result.get(0).getQuestionId());
-        assertEquals("Point phải = 10", Integer.valueOf(10), result.get(0).getPoint());
-
-        logger.info("[UT_EM_019] KẾT QUẢ: PASSED - Question data parsed thành công");
-    }
-
-    /**
-     * UT_EM_020: Convert question JSON với nhiều câu hỏi
-     * Mô tả: Parse question data có nhiều câu hỏi
-     * Input: questionData với 3 câu hỏi
-     * Expected: List có 3 phần tử
-     */
-    @Test
-    public void UT_EM_020_convertQuestionJsonToObject_multipleQuestions_shouldReturnAll() throws IOException {
-        logger.info("[UT_EM_020] BẮT ĐẦU: Convert question JSON với nhiều câu hỏi");
-
-        // Arrange
-        sampleExam.setQuestionData("[{\"questionId\":1,\"point\":10},{\"questionId\":2,\"point\":20},{\"questionId\":3,\"point\":30}]");
-        logger.info("[UT_EM_020] Input: 3 câu hỏi");
-
-        // Act
-        List<ExamQuestionPoint> result = examController.convertQuestionJsonToObject(Optional.of(sampleExam));
-
-        // Assert
-        assertNotNull("Kết quả không được null", result);
-        assertEquals("Phải có 3 question points", 3, result.size());
-        assertEquals("Tổng điểm phải = 60",
-                Integer.valueOf(60),
-                Integer.valueOf(result.stream().mapToInt(ExamQuestionPoint::getPoint).sum()));
-
-        logger.info("[UT_EM_020] KẾT QUẢ: PASSED - 3 câu hỏi, tổng {} điểm",
-                result.stream().mapToInt(ExamQuestionPoint::getPoint).sum());
-    }
-
-    // ========================================================================================
-    // TEST CASES BỔ SUNG CHO CÁC ENDPOINT CHƯA ĐƯỢC BAO PHỦ
-    // ========================================================================================
-
-    /**
-     * UT_EM_021: Lấy danh sách exam theo user hiện tại
-     * Mô tả: API phải trả về danh sách exam-user và gán trạng thái locked theo thời gian bắt đầu
-     * Input: username=student01, 1 exam chưa bắt đầu + 1 exam đã bắt đầu
-     * Expected: Response 200, exam chưa bắt đầu locked=false, exam đã bắt đầu locked=true
-     */
-    @Test
-    public void UT_EM_021_getAllByUser_shouldReturnListAndSetLockedState() {
-        logger.info("[UT_EM_021] BẮT ĐẦU: getAllByUser phải trả đúng danh sách và trạng thái khóa");
-
-        setAuthentication("student01");
-
-        Exam upcomingExam = new Exam();
-        upcomingExam.setId(11L);
-        upcomingExam.setTitle("Bài thi sắp diễn ra");
-        upcomingExam.setBeginExam(new Date(System.currentTimeMillis() + 600000));
-
-        Exam startedExam = new Exam();
-        startedExam.setId(12L);
-        startedExam.setTitle("Bài thi đã bắt đầu");
-        startedExam.setBeginExam(new Date(System.currentTimeMillis() - 600000));
-
-        ExamUser euUpcoming = new ExamUser();
-        euUpcoming.setExam(upcomingExam);
-        ExamUser euStarted = new ExamUser();
-        euStarted.setExam(startedExam);
-
-        when(examUserService.getExamListByUsername("student01"))
-                .thenReturn(Arrays.asList(euUpcoming, euStarted));
+    @DisplayName("UM_EM_005: Trường hợp 1 bài thi chưa bắt đầu --> trạng thái của exam user là khóa, không thể làm bài")
+    public void getAllByUser_CurrentDateGreaterThanBeginExam() {
+        Authentication auth = mock(Authentication.class);
+        SecurityContext securityContext = mock(SecurityContext.class);
+        SecurityContextHolder.setContext(securityContext);
+        String username = "student1";
+
+        when(securityContext.getAuthentication()).thenReturn(auth);
+        when(auth.getName()).thenReturn(username);
+
+        Exam futureExam = createExamWithTime(true, false, 600000L, 3600000L, null, 60);
+        ExamUser futureExamUser = createExamUser(futureExam, new User(), false, false, 1000, "", -1.0);
+
+        when(examUserService.getExamListByUsername("student1")).thenReturn(Arrays.asList(futureExamUser));
 
         ResponseEntity<List<ExamUser>> response = examController.getAllByUser();
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertNotNull(response.getBody());
-        assertEquals(2, response.getBody().size());
-        assertFalse("Bài chưa tới giờ phải unlocked", response.getBody().get(0).getExam().isLocked());
-        assertTrue("Bài đã tới giờ phải locked", response.getBody().get(1).getExam().isLocked());
+        assertTrue(response.getBody().get(0).getExam().isLocked());
+
+        verify(examUserService).getExamListByUsername("student1");
     }
 
-    /**
-     * UT_EM_022: Lấy danh sách câu hỏi khi exam không tồn tại
-     * Mô tả: Kiểm tra endpoint trả về NOT_FOUND khi examId không có
-     * Input: examId=999
-     * Expected: Response 404
-     */
     @Test
-    public void UT_EM_022_getAllQuestions_examNotFound_shouldReturn404() throws IOException {
-        logger.info("[UT_EM_022] BẮT ĐẦU: getAllQuestions khi exam không tồn tại");
+    @DisplayName("UM_EM_006: Trường hợp 1 bài thi đã bắt đầu --> trạng thái bài thi không khóa, có thể làm bài")
+    public void getAllByUser_CurrentDateSmallerOrEqualThanBeginExam() {
+        //arrange
+        Authentication auth = mock(Authentication.class);
+        SecurityContext securityContext = mock(SecurityContext.class);
+        SecurityContextHolder.setContext(securityContext);
+        String username = "student1";
 
-        when(userService.getUserName()).thenReturn("student01");
-        when(examService.getExamById(999L)).thenReturn(Optional.empty());
+        when(securityContext.getAuthentication()).thenReturn(auth);
+        when(auth.getName()).thenReturn(username);
 
-        ResponseEntity<ExamQuestionList> response = examController.getAllQuestions(999L);
+        Exam pastExam = createExamWithTime(false, false, -600000L, 3600000L, null, 60);
+        ExamUser pastExamUser = createExamUser(pastExam, new User(), false, false, 1000, "", -1.0);
 
-        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+        when(examUserService.getExamListByUsername("student1")).thenReturn(Arrays.asList(pastExamUser));
+
+        //act
+        ResponseEntity<List<ExamUser>> response = examController.getAllByUser();
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertFalse(response.getBody().get(0).getExam().isLocked());
+
+        SecurityContextHolder.clearContext();
+        verify(examUserService).getExamListByUsername("student1");
     }
 
-    /**
-     * UT_EM_023: Lấy danh sách câu hỏi khi exam đang khóa
-     * Mô tả: Khi exam bị khóa thì không cho phép vào đề
-     * Input: exam.locked=true
-     * Expected: Response 400 BAD_REQUEST
-     */
     @Test
-    public void UT_EM_023_getAllQuestions_lockedExam_shouldReturnBadRequest() throws IOException {
-        logger.info("[UT_EM_023] BẮT ĐẦU: getAllQuestions khi exam bị khóa");
+    @DisplayName("UM_EM_007: Trường hợp user không có bài thi nào --> trả về danh sách rỗng, không ném ra exception")
+    public void getAllByUser_userNoExamUser() {
+        //arrange
+        Authentication auth = mock(Authentication.class);
+        SecurityContext securityContext = mock(SecurityContext.class);
+        SecurityContextHolder.setContext(securityContext);
+        String username = "student1";
+        List<ExamUser> emptyList = new ArrayList<>();
 
-        sampleExam.setLocked(true);
-        when(userService.getUserName()).thenReturn("student01");
-        when(examService.getExamById(1L)).thenReturn(Optional.of(sampleExam));
+        when(securityContext.getAuthentication()).thenReturn(auth);
+        when(auth.getName()).thenReturn(username);
 
+        when(examUserService.getExamListByUsername("student1")).thenReturn(emptyList);
+
+        ResponseEntity<List<ExamUser>> response = examController.getAllByUser();
+        //assert
+        assertTrue(response.getBody().isEmpty());
+
+        SecurityContextHolder.clearContext();
+        verify(examUserService).getExamListByUsername("student1");
+    }
+
+
+    @Test
+    @DisplayName("UM_EM_008: Trường hợp 5 bài thi chưa bắt đầu --> sau khi chạy xong thì 5 bài đều bị locked (chỉ để kiểm tra vòng lặp)")
+    public void getAllByUser_5ExamUserCurrentDateGreaterThanBeginExam() {
+        //arrange
+        Authentication auth = mock(Authentication.class);
+        SecurityContext securityContext = mock(SecurityContext.class);
+        SecurityContextHolder.setContext(securityContext);
+        String username = "student1";
+
+        Exam futureExam1 = createExamWithTime(true, false, 600000L, 3600000L, null, 60);
+        ExamUser futureExamUser1 = createExamUser(futureExam1, new User(), false, false, 1000, "", -1.0);
+        Exam futureExam2 = createExamWithTime(true, false, 600000L, 3600000L, null, 60);
+        ExamUser futureExamUser2 = createExamUser(futureExam2, new User(), false, false, 1000, "", -1.0);
+        Exam futureExam3 = createExamWithTime(true, false, 600000L, 3600000L, null, 60);
+        ExamUser futureExamUser3 = createExamUser(futureExam3, new User(), false, false, 1000, "", -1.0);
+        Exam futureExam4 = createExamWithTime(true, false, 600000L, 3600000L, null, 60);
+        ExamUser futureExamUser4 = createExamUser(futureExam4, new User(), false, false, 1000, "", -1.0);
+        Exam futureExam5 = createExamWithTime(true, false, 600000L, 3600000L, null, 60);
+        ExamUser futureExamUser5 = createExamUser(futureExam5, new User(), false, false, 1000, "", -1.0);
+
+        when(securityContext.getAuthentication()).thenReturn(auth);
+        when(auth.getName()).thenReturn(username);
+        when(examUserService.getExamListByUsername("student1")).thenReturn(Arrays.asList(futureExamUser1, futureExamUser2, futureExamUser3, futureExamUser4, futureExamUser5));
+
+        //act
+        ResponseEntity<List<ExamUser>> response = examController.getAllByUser();
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(response.getBody().get(0).getExam().isLocked(), true);
+        assertEquals(response.getBody().get(4).getExam().isLocked(), true);
+
+        SecurityContextHolder.clearContext();
+        verify(examUserService).getExamListByUsername("student1");
+    }
+
+    @Test
+    @DisplayName("UM_EM_009: Trường hợp tìm thấy exam user --> trả về response có status thành công, trong response chứa exam user đúng với exam id truyền vào")
+    public void getExamUserById_hasFoundExamUser() throws ParseException {
+        //arrange
+        String username = "student1";
+        when(userService.getUserName()).thenReturn(username);
+
+        ExamUser examUser = new  ExamUser();
+        examUser.setExam(new Exam());
+        when(examUserService.findByExamAndUser(1L,  username)).thenReturn(examUser);
+
+        //act
+        ResponseEntity<ExamUser> response = examController.getExamUserById(1L);
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertSame(response.getBody(), examUser);
+
+    }
+
+    @Test
+    @DisplayName("UM_EM_010: Trường hợp không tìm thấy exan user --> trả về EntityNotFoundException")
+    public void getExamUserById_hasNotFoundException() throws ParseException {
+        //arrange
+        String username = "student1";
+        when(userService.getUserName()).thenReturn(username);
+
+        when(examUserService.findByExamAndUser(9999L,  username)).thenReturn(null);
+
+        //assert
+        assertThrows(EntityNotFoundException.class, () -> examController.getExamUserById(9999L));
+    }
+
+    @Test
+    @DisplayName("UM_EM_011: Trường hợp lấy ra bài kiểm tra đã bắt đầu làm rồi, " +
+            "có 1 câu hỏi, người dùng đã chọn đáp án 1 câu hỏi " +
+            "--> trả ra danh sách câu hỏi có chứa câu hỏi có đáp án mà người dùng đã chọn," +
+            " status code thành công")
+    public void getAllQuestions_ExamHasStartedAnd1Question() throws Exception {
+        //arrange
+        String username = "student1";
+        when(userService.getUserName()).thenReturn(username);
+
+        Exam exam = createExamWithTime(false, false, -600000L, 3600000L, null, 60);
+        when(examService.getExamById(1L)).thenReturn(Optional.of(exam));
+
+        String answerSheetJson = generateAnswerSheetString(1);
+        ExamUser examUser = createExamUser(exam, new User(), true, false, 1700, answerSheetJson, -1.0);
+        when(examUserService.findByExamAndUser(1L, "student1")).thenReturn(examUser);
+
+        Question question = new Question();
+        question.setId(1L);
+        when(questionService.getQuestionById(1L)).thenReturn(Optional.of(question));
+
+        //act
         ResponseEntity<ExamQuestionList> response = examController.getAllQuestions(1L);
 
-        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-    }
-
-    /**
-     * UT_EM_024: Lấy danh sách câu hỏi khi user đã bắt đầu làm bài
-     * Mô tả: Hệ thống phải trả về bộ câu hỏi từ answer sheet đã lưu của user
-     * Input: examUser.isStarted=true, answerSheet hợp lệ
-     * Expected: Response 200, trả đúng câu hỏi và remainingTime
-     */
-    @Test
-    public void UT_EM_024_getAllQuestions_startedExam_shouldReturnSavedQuestionList() throws IOException {
-        logger.info("[UT_EM_024] BẮT ĐẦU: getAllQuestions khi user đã bắt đầu làm bài");
-
-        sampleExam.setLocked(false);
-        sampleExamUser.setIsStarted(true);
-        sampleExamUser.setRemainingTime(1800);
-        sampleExamUser.setAnswerSheet("[{\"questionId\":1,\"choices\":[{\"id\":1,\"choiceText\":\"int\",\"isCorrected\":1}],\"point\":10}]");
-
-        when(userService.getUserName()).thenReturn("student01");
-        when(examService.getExamById(1L)).thenReturn(Optional.of(sampleExam));
-        when(examUserService.findByExamAndUser(1L, "student01")).thenReturn(sampleExamUser);
-        when(questionService.getQuestionById(1L)).thenReturn(Optional.of(sampleQuestion));
-
-        ResponseEntity<ExamQuestionList> response = examController.getAllQuestions(1L);
-
+        //assert
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertNotNull(response.getBody());
+        assertEquals(1700, response.getBody().getRemainingTime());
         assertEquals(1, response.getBody().getQuestions().size());
-        assertEquals(1800, response.getBody().getRemainingTime());
+        assertEquals(10, response.getBody().getQuestions().get(0).getPoint());
+        assertEquals(question.getChoices(), response.getBody().getQuestions().get(0).getChoices());
+        verify(examUserService, never()).update(any(ExamUser.class));
     }
 
-    /**
-     * UT_EM_025: Lưu câu trả lời khi không tồn tại exam-user
-     * Mô tả: Nếu không tìm thấy exam-user theo examId+username thì phải báo lỗi
-     * Input: examId=1, username=student01, examUser=null
-     * Expected: Ném EntityNotFoundException
-     */
     @Test
-    public void UT_EM_025_saveUserExamAnswer_examUserNotFound_shouldThrowEntityNotFound() throws JsonProcessingException {
-        logger.info("[UT_EM_025] BẮT ĐẦU: saveUserExamAnswer khi không tìm thấy exam-user");
+    @DisplayName("UM_EM_012: Trường hợp lấy ra bài kiểm tra đã bắt đầu làm rồi, " +
+            "có 1 câu hỏi, chưa chọn đáp án câu nào " +
+            "--> trả ra bài thi không có câu hỏi đã chon đáp án, " +
+            "status code thành công")
+    public void getAllQuestions_ExamHasStartedAndNoQuestion() throws IOException {
+        //arrange
+        String username = "student1";
+        when(userService.getUserName()).thenReturn(username);
 
-        setAuthentication("student01");
-        when(examUserService.findByExamAndUser(1L, "student01")).thenReturn(null);
+        Exam exam = createExamWithTime(false, false, -600000L, 3600000L, null, 60);
+        when(examService.getExamById(1L)).thenReturn(Optional.of(exam));
 
-        try {
-            examController.saveUserExamAnswer(Collections.emptyList(), 1L, false, 3500);
-            fail("Phải ném EntityNotFoundException");
-        } catch (javax.persistence.EntityNotFoundException expected) {
-            assertTrue(expected.getMessage().contains("Not found this exam"));
-        }
-    }
+        String answerSheetJson = "[]";
+        ExamUser examUser = createExamUser(exam, new User(), true, false, 1700, answerSheetJson, -1.0);
+        when(examUserService.findByExamAndUser(1L, "student1")).thenReturn(examUser);
 
-    /**
-     * UT_EM_026: Lưu câu trả lời khi bài thi đã kết thúc
-     * Mô tả: Không cho phép cập nhật bài thi đã finish
-     * Input: examUser.isFinished=true
-     * Expected: Ném ExceptionInInitializerError
-     */
-    @Test
-    public void UT_EM_026_saveUserExamAnswer_finishedExam_shouldThrowExceptionInInitializerError() throws JsonProcessingException {
-        logger.info("[UT_EM_026] BẮT ĐẦU: saveUserExamAnswer khi bài thi đã kết thúc");
+        //act
+        ResponseEntity<ExamQuestionList> response = examController.getAllQuestions(1L);
 
-        setAuthentication("student01");
-        sampleExamUser.setIsFinished(true);
-        when(examUserService.findByExamAndUser(1L, "student01")).thenReturn(sampleExamUser);
-
-        try {
-            examController.saveUserExamAnswer(Collections.emptyList(), 1L, false, 3000);
-            fail("Phải ném ExceptionInInitializerError");
-        } catch (ExceptionInInitializerError expected) {
-            assertTrue(expected.getMessage().contains("This exam was end"));
-        }
-    }
-
-    /**
-     * UT_EM_027: Lưu câu trả lời khi nộp bài thành công
-     * Mô tả: Kiểm tra cập nhật isFinished, remainingTime, timeFinish và answerSheet
-     * Input: isFinish=true, remainingTime=1200
-     * Expected: examUserService.update() được gọi với dữ liệu đã cập nhật
-     */
-    @Test
-    public void UT_EM_027_saveUserExamAnswer_finishExam_shouldUpdateState() throws JsonProcessingException {
-        logger.info("[UT_EM_027] BẮT ĐẦU: saveUserExamAnswer cập nhật trạng thái nộp bài");
-
-        setAuthentication("student01");
-        sampleExamUser.setIsFinished(false);
-        sampleExamUser.setTimeFinish(null);
-        when(examUserService.findByExamAndUser(1L, "student01")).thenReturn(sampleExamUser);
-
-        List<AnswerSheet> answerSheets = Arrays.asList(new AnswerSheet(1L,
-                Arrays.asList(new Choice(1L, "int", 1)), 10));
-
-        examController.saveUserExamAnswer(answerSheets, 1L, true, 1200);
-
-        assertTrue(sampleExamUser.getIsFinished());
-        assertEquals(1200, sampleExamUser.getRemainingTime());
-        assertNotNull(sampleExamUser.getTimeFinish());
-        assertNotNull(sampleExamUser.getAnswerSheet());
-        verify(examUserService, times(1)).update(sampleExamUser);
-    }
-
-    /**
-     * UT_EM_028: Lấy báo cáo câu hỏi khi exam không tồn tại
-     * Mô tả: Endpoint report phải trả về NOT_FOUND cho examId không hợp lệ
-     * Input: examId=999
-     * Expected: Response 404
-     */
-    @Test
-    public void UT_EM_028_getResultExamQuestionsReport_examNotFound_shouldReturn404() throws IOException {
-        logger.info("[UT_EM_028] BẮT ĐẦU: getResultExamQuestionsReport khi exam không tồn tại");
-
-        when(examService.getExamById(999L)).thenReturn(Optional.empty());
-
-        ResponseEntity response = examController.getResultExamQuestionsReport(999L);
-
-        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
-    }
-
-    /**
-     * UT_EM_029: Lấy báo cáo câu hỏi khi chưa có ai nộp bài
-     * Mô tả: Hệ thống trả về thông báo chưa có người dùng làm bài
-     * Input: finishedExamUsers = empty
-     * Expected: Response 200 và body chứa thông báo phù hợp
-     */
-    @Test
-    public void UT_EM_029_getResultExamQuestionsReport_noFinishedUsers_shouldReturnMessage() throws IOException {
-        logger.info("[UT_EM_029] BẮT ĐẦU: getResultExamQuestionsReport khi chưa ai nộp bài");
-
-        when(examService.getExamById(1L)).thenReturn(Optional.of(sampleExam));
-        when(examUserService.findExamUsersByIsFinishedIsTrueAndExam_Id(1L)).thenReturn(Collections.emptyList());
-
-        ResponseEntity response = examController.getResultExamQuestionsReport(1L);
-
+        //assert
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertTrue(response.getBody().toString().contains("Chưa có người dùng thực hiện bài kiểm tra"));
+        assertNotNull(response.getBody());
+        assertEquals(1700, response.getBody().getRemainingTime());
+        assertEquals(0, response.getBody().getQuestions().size());
+        verify(questionService, never()).getQuestionById(1L);
+        verify(examUserService, never()).update(any(ExamUser.class));
     }
 
-    /**
-     * UT_EM_030: Lấy báo cáo câu hỏi phải cộng đúng theo từng user
-     * Mô tả: Mỗi user phải được chấm từ answerSheet riêng, không dùng lặp lại answer của user đầu
-     * Input: 2 users, user1 đúng, user2 sai
-     * Expected: correctTotal = 1
-     */
     @Test
-    public void UT_EM_030_getResultExamQuestionsReport_shouldAggregatePerUserCorrectly() throws IOException {
-        logger.info("[UT_EM_030] BẮT ĐẦU: getResultExamQuestionsReport phải cộng kết quả theo từng user");
+    @DisplayName("UM_EM_013: Trường hợp bài thi có 5 câu hỏi, đã chọn đáp án 5 câu" +
+            " --> trả ra đầy đủ thông tin 5 câu hỏi và đáp án đã chọn")
+    public void getAllQuestions_ExamHasStartAnd5Questions() throws Exception {
+        //arrange
+        String username = "student1";
+        when(userService.getUserName()).thenReturn(username);
 
-        sampleExam.setQuestionData("[{\"questionId\":1,\"point\":10}]");
+        Exam exam = createExamWithTime(false, false, -600000L, 3600000L, null, 60);
+        when(examService.getExamById(1L)).thenReturn(Optional.of(exam));
 
-        ExamUser user1 = new ExamUser();
-        user1.setUser(studentUser);
-        user1.setIsFinished(true);
-        user1.setAnswerSheet("[{\"questionId\":1,\"choices\":[{\"id\":1,\"choiceText\":\"int\",\"isCorrected\":1}],\"point\":10}]");
+        String answerSheetJson = generateAnswerSheetString(5);
+        ExamUser examUser = createExamUser(exam, new User(), true, false, 1700, answerSheetJson, -1.0);
+        when(examUserService.findByExamAndUser(1L, "student1")).thenReturn(examUser);
 
-        ExamUser user2 = new ExamUser();
-        user2.setUser(lecturerUser);
-        user2.setIsFinished(true);
-        user2.setAnswerSheet("[{\"questionId\":1,\"choices\":[{\"id\":1,\"choiceText\":\"int\",\"isCorrected\":0}],\"point\":10}]");
+        for (long i = 1; i <= 5; i++) {
+            Question q = new Question();
+            q.setId(i);
 
-        ChoiceList firstUserChoiceList = new ChoiceList();
-        firstUserChoiceList.setQuestion(sampleQuestion);
-        firstUserChoiceList.setIsSelectedCorrected(true);
+            when(questionService.getQuestionById(i)).thenReturn(Optional.of(q));
+        }
 
-        ChoiceList secondUserChoiceList = new ChoiceList();
-        secondUserChoiceList.setQuestion(sampleQuestion);
-        secondUserChoiceList.setIsSelectedCorrected(false);
+        //act
+        ResponseEntity<ExamQuestionList> response = examController.getAllQuestions(1L);
 
-        when(examService.getExamById(1L)).thenReturn(Optional.of(sampleExam));
-        when(examUserService.findExamUsersByIsFinishedIsTrueAndExam_Id(1L)).thenReturn(Arrays.asList(user1, user2));
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals(1700, response.getBody().getRemainingTime());
+        assertEquals(5, response.getBody().getQuestions().size());
+        assertEquals(10, response.getBody().getQuestions().get(0).getPoint());
+        assertEquals(10, response.getBody().getQuestions().get(4).getPoint());
+        verify(questionService, times(5)).getQuestionById(anyLong());
+        verify(examUserService, never()).update(any(ExamUser.class));
+    }
+
+    @Test
+    @DisplayName("UM_EM_014: Trường hợp bài thi chưa làm, có trộn câu hỏi, có 5 câu hỏi" +
+            " --> trả ra đầy đủ thông tin bài thi, 5 câu hỏi tráo vị trí ")
+    public void getAllQuestions_ExamNotStartedAndHas5QuestionsAndHasShuffle() throws Exception {
+        //arrange
+        String username = "student1";
+        when(userService.getUserName()).thenReturn(username);
+
+        String questionData = generateExamQuestionPointString(5);
+
+        Exam exam = createExamWithTime(false, true, -600000L, 3600000L, questionData, 60);
+        when(examService.getExamById(1L)).thenReturn(Optional.of(exam));
+
+        String answerSheetJson = null;
+        ExamUser examUser = createExamUser(exam, new User(), false, false, 1700, answerSheetJson, -1.0);
+        when(examUserService.findByExamAndUser(1L, "student1")).thenReturn(examUser);
+
+        List<Question> questions = new ArrayList<>();
+        List<AnswerSheet> answerSheets = new ArrayList<>();
+        for (long i = 1; i <= 5; i++) {
+            Question q = new Question();
+            q.setId(i);
+            questions.add(q);
+
+            AnswerSheet as = new AnswerSheet(i, new ArrayList<>(), 10);
+            answerSheets.add(as);
+
+            when(questionService.getQuestionById(i)).thenReturn(Optional.of(q));
+        }
+
+        when(questionService.getQuestionPointList(anyList())).thenReturn(questions);
+        when(questionService.convertFromQuestionList(anyList())).thenReturn(answerSheets);
+
+        //act
+        ResponseEntity<ExamQuestionList> response = examController.getAllQuestions(1L);
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+        List<Long> actualIds = new ArrayList<>();
+        for  (Question q : response.getBody().getQuestions()) {
+            actualIds.add(q.getId());
+        }
+        assertThat(actualIds)
+                .hasSize(5)
+                .containsExactlyInAnyOrder(1L, 2L, 3L, 4L, 5L);
+
+        assertTrue(examUser.getIsStarted());
+        assertNotNull(examUser.getAnswerSheet());
+        assertNotNull(examUser.getTimeStart());
+
+        verify(userService, times(1)).getUserName();
+        verify(examService, times(1)).getExamById(anyLong());
+        verify(examUserService, times(1)).findByExamAndUser(anyLong(), anyString());
+        verify(examUserService, times(2)).update(examUser);
+        verify(questionService, times(5)).getQuestionById(anyLong());
+    }
+
+    @Test
+    @DisplayName("UM_EM_015: Trường hợp bài thi chưa làm, không trộn câu hỏi, có 5 câu hỏi --> trả ra đầy đủ thông tin bài thi, 5 câu hỏi giữ nguyên vị trí ")
+    public void getAllQuestions_ExamNotStartedAndHas5QuestionsAndNoShuffle() throws Exception {
+        //arrange
+        String username = "student1";
+        when(userService.getUserName()).thenReturn(username);
+
+        String questionData = generateExamQuestionPointString(5);
+
+        Exam exam = createExamWithTime(false, false, -600000L, 3600000L, questionData, 60);
+        when(examService.getExamById(1L)).thenReturn(Optional.of(exam));
+
+        String answerSheetJson = null;
+        ExamUser examUser = createExamUser(exam, new User(), false, false, 1700, answerSheetJson, -1.0);
+        when(examUserService.findByExamAndUser(1L, "student1")).thenReturn(examUser);
+
+        List<Question> questions = new ArrayList<>();
+        List<AnswerSheet> answerSheets = new ArrayList<>();
+        for (long i = 1; i <= 5; i++) {
+            Question q = new Question();
+            q.setId(i);
+            questions.add(q);
+
+            AnswerSheet as = new AnswerSheet(i, new ArrayList<>(), 10);
+            answerSheets.add(as);
+
+            when(questionService.getQuestionById(i)).thenReturn(Optional.of(q));
+        }
+
+        when(questionService.getQuestionPointList(anyList())).thenReturn(questions);
+        when(questionService.convertFromQuestionList(anyList())).thenReturn(answerSheets);
+
+        //act
+        ResponseEntity<ExamQuestionList> response = examController.getAllQuestions(1L);
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals(questions, response.getBody().getQuestions());
+
+        assertTrue(examUser.getIsStarted());
+        assertNotNull(examUser.getAnswerSheet());
+        assertNotNull(examUser.getTimeStart());
+
+        verify(userService, times(1)).getUserName();
+        verify(examService, times(1)).getExamById(anyLong());
+        verify(examUserService, times(1)).findByExamAndUser(anyLong(), anyString());
+        verify(examUserService, times(1)).update(examUser);
+        verify(questionService, times(5)).getQuestionById(anyLong());
+    }
+
+    @Test
+    @DisplayName("UM_EM_016: Trường hợp bài thi chưa làm, không có câu hỏi " +
+            "--> trả ra đầy đủ thông tin bài thi, không có câu hỏi ")
+    public void getAllQuestions_ExamNotStartedAndNoQuestionsAndNoShuffle() throws Exception {
+        //arrange
+        String username = "student1";
+        when(userService.getUserName()).thenReturn(username);
+
+        String questionData = generateExamQuestionPointString(0);
+
+        Exam exam = createExamWithTime(false, false, -600000L, 3600000L, questionData, 60);
+        when(examService.getExamById(1L)).thenReturn(Optional.of(exam));
+
+        String answerSheetJson = null;
+        ExamUser examUser = createExamUser(exam, new User(), false, false, 1700, answerSheetJson, -1.0);
+        when(examUserService.findByExamAndUser(1L, "student1")).thenReturn(examUser);
+
+        List<Question> questions = new ArrayList<>();
+        List<AnswerSheet> answerSheets = new ArrayList<>();
+
+        when(questionService.getQuestionPointList(anyList())).thenReturn(questions);
+        when(questionService.convertFromQuestionList(anyList())).thenReturn(answerSheets);
+
+        //act
+        ResponseEntity<ExamQuestionList> response = examController.getAllQuestions(1L);
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+
+        assertTrue(examUser.getIsStarted());
+        assertNotNull(examUser.getAnswerSheet());
+        assertNotNull(examUser.getTimeStart());
+        assertEquals(questions, response.getBody().getQuestions());
+
+        verify(userService, times(1)).getUserName();
+        verify(examService, times(1)).getExamById(anyLong());
+        verify(examUserService, times(1)).findByExamAndUser(anyLong(), anyString());
+        verify(examUserService, times(2)).update(examUser);
+        verify(questionService, never()).getQuestionById(anyLong());
+    }
+
+    @Test
+    @DisplayName("UT_EM_017: Trường hợp không tìm thấy bài kiểm tra --> Trả về EntityNotExistsException")
+    public void getAllQuestions_ExamNotFound() {
+        //arrange
+        String username = "student1";
+        when(userService.getUserName()).thenReturn(username);
+
+        //assert
+        assertThrows(EntityNotExistsException.class, () -> examController.getAllQuestions(999L));
+        verify(userService, times(1)).getUserName();
+    }
+
+    @Test
+    @DisplayName("UT_EM_018: Trường hợp bài kiểm tra bị locked --> Trả về IllegalStateException")
+    public void getAllQuestions_ExamIsLocked() throws Exception {
+        //arrange
+        String username = "student1";
+        when(userService.getUserName()).thenReturn(username);
+
+        String questionData = generateExamQuestionPointString(5);
+
+        Exam exam = createExamWithTime(true, false, -600000L, 3600000L, questionData, 60);
+        when(examService.getExamById(1L)).thenReturn(Optional.of(exam));
+
+
+        //assert
+        assertThrows(IllegalStateException.class, () -> examController.getAllQuestions(1L));
+        verify(userService, times(1)).getUserName();
+        verify(examService, times(1)).getExamById(anyLong());
+    }
+
+    @Test
+    @DisplayName("UT_EM_019: Trường hợp chưa đến giờ làm bài --> Trả về IllegalStateException")
+    public void getAllQuestions_ExamCurrentTimeSmallerThanBeginExam() throws Exception {
+        //arrange
+        String username = "student1";
+        when(userService.getUserName()).thenReturn(username);
+
+        String questionData = generateExamQuestionPointString(5);
+
+        Exam exam = createExamWithTime(false, false, 600000L, 3600000L, questionData, 60);
+        when(examService.getExamById(1L)).thenReturn(Optional.of(exam));
+
+
+        //assert
+        assertThrows(IllegalStateException.class, () -> examController.getAllQuestions(1L));
+        verify(userService, times(1)).getUserName();
+        verify(examService, times(1)).getExamById(anyLong());
+    }
+
+    @Test
+    @DisplayName("UT_EM_020: Trường hợp có user, có intake, có part, tạo exam thành công " +
+            "--> trả về response thành công, có thông tin exam")
+    public void createExam_ValidDataAndSucceess() throws Exception {
+        //arrange
+        String username = "admin1";
+        when(userService.getUserName()).thenReturn(username);
+
+        User user = new User();
+        user.setId(1L);
+        when(userService.getUserByUsername(username)).thenReturn(Optional.of(user));
+
+        Intake intake = new Intake();
+        intake.setId(1L);
+        when(intakeService.findById(1L)).thenReturn(Optional.of(intake));
+
+        Part part = new Part();
+        part.setId(1L);
+        when(partService.findPartById(1L)).thenReturn(Optional.of(part));
+
+        Exam exam = new Exam();
+        exam.setQuestionData("[]");
+        when(examService.saveExam(exam)).thenReturn(exam);
+
+        List<User> users = new ArrayList<>();
+        User user1 = new User();
+        user1.setId(2L);
+        user1.setIntake(intake);
+        users.add(user1);
+        User user2 = new User();
+        user2.setId(3L);
+        user2.setIntake(intake);
+        users.add(user2);
+        when(userService.findAllByIntakeId(1L)).thenReturn(users);
+
+        //act
+        ResponseEntity<?> response = examController.createExam(exam, 1L, 1L, false, false);
+
+        //assert
+        assertEquals(user, exam.getCreatedBy());
+        assertEquals(intake, exam.getIntake());
+        assertEquals(part, exam.getPart());
+        assertFalse(exam.isCanceled());
+        assertFalse(exam.isShuffle());
+
+        verify(userService, times(1)).getUserByUsername(username);
+        verify(userService, times(1)).getUserName();
+        verify(intakeService, times(1)).findById(1L);
+        verify(partService, times(1)).findPartById(1L);
+        verify(examService, times(1)).saveExam(exam);
+        verify(userService, times(1)).findAllByIntakeId(1L);
+        verify(examUserService, times(1)).create(exam, users);
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_021: Trường hợp chuyển đổi dữ liệu câu hỏi từ String sang Array thất bại" +
+            " --> ném ra IllegalArgumentException")
+    public void createExam_convertQuestionDataFail() throws Exception {
+        //arrange
+        String username = "student1";
+        when(userService.getUserName()).thenReturn(username);
+
+        User user = new User();
+        user.setId(1L);
+        when(userService.getUserByUsername(username)).thenReturn(Optional.of(user));
+
+        Intake intake = new Intake();
+        intake.setId(1L);
+        when(intakeService.findById(1L)).thenReturn(Optional.of(intake));
+
+        Part part = new Part();
+        part.setId(1L);
+        when(partService.findPartById(1L)).thenReturn(Optional.of(part));
+
+        Exam exam = new Exam();
+        exam.setQuestionData("[][][]");
+        when(examService.saveExam(exam)).thenReturn(exam);
+
+        List<User> users = new ArrayList<>();
+        User user1 = new User();
+        user1.setId(2L);
+        user1.setIntake(intake);
+        users.add(user1);
+        User user2 = new User();
+        user2.setId(3L);
+        user2.setIntake(intake);
+        users.add(user2);
+        when(userService.findAllByIntakeId(1L)).thenReturn(users);
+
+        //assert
+        assertThrows(IllegalArgumentException.class, () -> examController.createExam(exam, 1L, 1L, false, false));
+
+        verify(userService, times(1)).getUserByUsername(username);
+        verify(userService, times(1)).getUserName();
+        verify(intakeService, times(1)).findById(1L);
+        verify(partService, times(1)).findPartById(1L);
+        verify(examService, times(1)).saveExam(exam);
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_022: Trường hợp tạo exam user fail --> trả về RuntimeException")
+    public void createExam_createExamUserFail() throws Exception {
+        //arrange
+        String username = "student1";
+        when(userService.getUserName()).thenReturn(username);
+
+        User user = new User();
+        user.setId(1L);
+        when(userService.getUserByUsername(username)).thenReturn(Optional.of(user));
+
+        Intake intake = new Intake();
+        intake.setId(1L);
+        when(intakeService.findById(1L)).thenReturn(Optional.of(intake));
+
+        Part part = new Part();
+        part.setId(1L);
+        when(partService.findPartById(1L)).thenReturn(Optional.of(part));
+
+        Exam exam = new Exam();
+        exam.setQuestionData("[]");
+        when(examService.saveExam(exam)).thenReturn(exam);
+
+        List<User> users = new ArrayList<>();
+        User user1 = new User();
+        user1.setId(2L);
+        user1.setIntake(intake);
+        users.add(user1);
+        User user2 = new User();
+        user2.setId(3L);
+        user2.setIntake(intake);
+        users.add(user2);
+        when(userService.findAllByIntakeId(1L)).thenReturn(users);
+
+        doThrow(new RuntimeException("Create exam user fail"))
+                .when(examUserService).create(any(Exam.class), anyList());
+
+
+        //assert
+        assertThrows(RuntimeException.class, () -> examController.createExam(exam, 1L, 1L, false, false));
+
+        verify(userService, times(1)).getUserByUsername(username);
+        verify(userService, times(1)).getUserName();
+        verify(intakeService, times(1)).findById(1L);
+        verify(partService, times(1)).findPartById(1L);
+        verify(examService, times(1)).saveExam(exam);
+        verify(userService, times(1)).findAllByIntakeId(1L);
+        verify(examUserService, times(1)).create(exam, users);
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_023: Trường hợp tìm users fail --> trả về RuntimeException")
+    public void createExam_findUserByIntakeFail() throws Exception {
+        //arrange
+        String username = "student1";
+        when(userService.getUserName()).thenReturn(username);
+
+        User user = new User();
+        user.setId(1L);
+        when(userService.getUserByUsername(username)).thenReturn(Optional.of(user));
+
+        Intake intake = new Intake();
+        intake.setId(1L);
+        when(intakeService.findById(1L)).thenReturn(Optional.of(intake));
+
+        Part part = new Part();
+        part.setId(1L);
+        when(partService.findPartById(1L)).thenReturn(Optional.of(part));
+
+        Exam exam = new Exam();
+        exam.setQuestionData("[]");
+        when(examService.saveExam(exam)).thenReturn(exam);
+
+        doThrow(new RuntimeException("Find users fail"))
+                .when(userService).findAllByIntakeId(1L);
+
+
+        //assert
+        assertThrows(RuntimeException.class, () -> examController.createExam(exam, 1L, 1L, false, false));
+
+        verify(userService, times(1)).getUserByUsername(username);
+        verify(userService, times(1)).getUserName();
+        verify(intakeService, times(1)).findById(1L);
+        verify(partService, times(1)).findPartById(1L);
+        verify(examService, times(1)).saveExam(exam);
+        verify(userService, times(1)).findAllByIntakeId(1L);
+        verify(examUserService, never()).create(exam, anyList());
+    }
+
+    @Test
+    @DisplayName("UT_EM_024: Trường hợp lưu Exam fail --> trả về RuntimeException")
+    public void createExam_saveExamFail() throws Exception {
+        //arrange
+        String username = "student1";
+        when(userService.getUserName()).thenReturn(username);
+
+        User user = new User();
+        user.setId(1L);
+        when(userService.getUserByUsername(username)).thenReturn(Optional.of(user));
+
+        Intake intake = new Intake();
+        intake.setId(1L);
+        when(intakeService.findById(1L)).thenReturn(Optional.of(intake));
+
+        Part part = new Part();
+        part.setId(1L);
+        when(partService.findPartById(1L)).thenReturn(Optional.of(part));
+
+        Exam exam = new Exam();
+        exam.setQuestionData("[]");
+
+        doThrow(new RuntimeException("Save exam fail"))
+                .when(examService).saveExam(exam);
+
+
+        //assert
+        assertThrows(RuntimeException.class, () -> examController.createExam(exam, 1L, 1L, false, false));
+
+        verify(userService, times(1)).getUserByUsername(username);
+        verify(userService, times(1)).getUserName();
+        verify(intakeService, times(1)).findById(1L);
+        verify(partService, times(1)).findPartById(1L);
+        verify(examService, times(1)).saveExam(exam);
+        verify(userService, never()).findAllByIntakeId(1L);
+        verify(examUserService, never()).create(exam, anyList());
+    }
+
+    @Test
+    @DisplayName("UT_EM_025: Trường hợp không tìm thấy part--> trả về EntityNotExistsException")
+    public void createExam_partNotExisted() throws Exception {
+        //arrange
+        String username = "student1";
+        when(userService.getUserName()).thenReturn(username);
+
+        User user = new User();
+        user.setId(1L);
+        when(userService.getUserByUsername(username)).thenReturn(Optional.of(user));
+
+        Intake intake = new Intake();
+        intake.setId(1L);
+        when(intakeService.findById(1L)).thenReturn(Optional.of(intake));
+
+        Exam exam = new Exam();
+        exam.setQuestionData("[]");
+
+
+        //assert
+        assertThrows(EntityNotExistsException.class, () -> examController.createExam(exam, 1L, 999L, false, false));
+
+        verify(userService, times(1)).getUserByUsername(username);
+        verify(userService, times(1)).getUserName();
+        verify(intakeService, times(1)).findById(1L);
+        verify(partService, times(1)).findPartById(999L);
+        verify(examService, never()).saveExam(exam);
+        verify(userService, never()).findAllByIntakeId(1L);
+        verify(examUserService, never()).create(exam, anyList());
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_026: Trường hợp không tìm thấy Intake--> trả về EntityNotExistsException")
+    public void createExam_intakeNotExisted() throws Exception {
+        //arrange
+        String username = "student1";
+        when(userService.getUserName()).thenReturn(username);
+
+        User user = new User();
+        user.setId(1L);
+        when(userService.getUserByUsername(username)).thenReturn(Optional.of(user));
+
+
+        Exam exam = new Exam();
+        exam.setQuestionData("[]");
+
+
+        //assert
+        assertThrows(EntityNotExistsException.class, () -> examController.createExam(exam, 999L, 999L, false, false));
+
+        verify(userService, times(1)).getUserByUsername(username);
+        verify(userService, times(1)).getUserName();
+        verify(intakeService, times(1)).findById(999L);
+        verify(partService, never()).findPartById(999L);
+        verify(examService, never()).saveExam(exam);
+        verify(userService, never()).findAllByIntakeId(1L);
+        verify(examUserService, never()).create(exam, anyList());
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_027: Trường hợp lỗi khi lấy thông tin user (người tạo đề thi) " +
+            "--> trả về RuntimeException")
+    public void createExam_getUserInfoFail() throws Exception {
+        //arrange
+        String username = "student1";
+        when(userService.getUserName()).thenReturn(username);
+
+        Exam exam = new Exam();
+        exam.setQuestionData("[]");
+
+        //assert
+        assertThrows(RuntimeException.class, () -> examController.createExam(exam, 999L, 999L, false, false));
+
+        verify(userService, times(1)).getUserName();
+        verify(userService, times(1)).getUserByUsername(username);
+        verify(intakeService, never()).findById(1L);
+        verify(partService, never()).findPartById(999L);
+        verify(examService, never()).saveExam(exam);
+        verify(userService, never()).findAllByIntakeId(1L);
+        verify(examUserService, never()).create(exam, anyList());
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_028: Trường hợp lỗi khi lấy username --> trả về RuntimeException")
+    public void createExam_getUsernameFail() throws Exception {
+        //arrange
+        Exam exam = new Exam();
+        exam.setQuestionData("[]");
+
+        //assert
+        assertThrows(RuntimeException.class, () -> examController.createExam(exam, 999L, 999L, false, false));
+
+        verify(userService, times(1)).getUserName();
+        verify(userService, never()).getUserByUsername(anyString());
+        verify(intakeService, never()).findById(1L);
+        verify(partService, never()).findPartById(999L);
+        verify(examService, never()).saveExam(exam);
+        verify(userService, never()).findAllByIntakeId(1L);
+        verify(examUserService, never()).create(exam, anyList());
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_029: Trường hợp lấy thông tin Exam thành công --> Trả về response status thành công, chứa thông tin Exam")
+    public void getExamById_foundExam() {
+        //arrange
+        Exam exam = new Exam();
+        exam.setId(1L);
+        when(examService.getExamById(1L)).thenReturn(Optional.of(exam));
+
+        //act
+        ResponseEntity<Exam> response = examController.getExamById(1L);
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(exam, response.getBody());
+        verify(examService, times(1)).getExamById(1L);
+    }
+
+    @Test
+    @DisplayName("UT_EM_030: Trường hợp không tìm thấy exam --> Trả về EntityNotExistsException")
+    public void getExamById_notFoundExam() {
+
+        //assert
+        assertThrows(EntityNotExistsException.class, () -> examController.getExamById(9999L));
+        verify(examService, times(1)).getExamById(9999L);
+    }
+
+    @Test
+    @DisplayName("UT_EM_031: Trường hợp lưu user exam khi chưa nộp bài " +
+            "-->  lưu user exam thành công, thuộc tính isFinished của user exam là false," +
+            " timeFinish là null")
+    public void saveUserExamAnswer_saveSuccessWhenNotFinish() throws Exception {
+        //arrange
+        Authentication auth = mock(Authentication.class);
+        SecurityContext securityContext = mock(SecurityContext.class);
+        SecurityContextHolder.setContext(securityContext);
+        String username = "student1";
+
+        when(securityContext.getAuthentication()).thenReturn(auth);
+        when(auth.getName()).thenReturn(username);
+
+        Exam exam = new Exam();
+        exam.setId(1L);
+
+        ExamUser examUser = new ExamUser();
+        examUser.setId(1L);
+        examUser.setIsFinished(false);
+
+        when(examUserService.findByExamAndUser(1L, username)).thenReturn(examUser);
+
+        List<AnswerSheet> answerSheets = generateAnswerSheet(5);
+        Long examId = 1L;
+        boolean isFinish = false;
+        int remainingTime = 1000000;
+
+        //act
+        examController.saveUserExamAnswer(answerSheets, examId, isFinish, remainingTime);
+
+        //assert
+        ArgumentCaptor<ExamUser> captor = ArgumentCaptor.forClass(ExamUser.class);
+        verify(examUserService, times(1)).update(captor.capture());
+
+        ExamUser updatedUser = captor.getValue();
+        assertEquals(remainingTime, updatedUser.getRemainingTime());
+        assertFalse(updatedUser.getIsFinished());
+        assertNull(updatedUser.getTimeFinish());
+        assertEquals(generateAnswerSheetString(5),  updatedUser.getAnswerSheet());
+    }
+
+    @Test
+    @DisplayName("UT_EM_032: Trường hợp lưu user exam khi nộp bài " +
+            "--> Lưu user exam thành công, thuộc tính isFinish là true, có timeFinish")
+    public void saveUserExamAnswer_saveSuccessWhenFinish() throws Exception {
+        //arrange
+        Authentication auth = mock(Authentication.class);
+        SecurityContext securityContext = mock(SecurityContext.class);
+        SecurityContextHolder.setContext(securityContext);
+        String username = "student1";
+
+        when(securityContext.getAuthentication()).thenReturn(auth);
+        when(auth.getName()).thenReturn(username);
+
+        Exam exam = new Exam();
+        exam.setId(1L);
+
+        ExamUser examUser = new ExamUser();
+        examUser.setId(1L);
+        examUser.setIsFinished(false);
+
+        when(examUserService.findByExamAndUser(1L, username)).thenReturn(examUser);
+
+        List<AnswerSheet> answerSheets = generateAnswerSheet(5);
+        Long examId = 1L;
+        boolean isFinish = true;
+        int remainingTime = 1000000;
+
+        //act
+        examController.saveUserExamAnswer(answerSheets, examId, isFinish, remainingTime);
+
+        //assert
+        ArgumentCaptor<ExamUser> captor = ArgumentCaptor.forClass(ExamUser.class);
+        verify(examUserService, times(1)).findByExamAndUser(examId, username);
+        verify(examUserService, times(1)).update(captor.capture());
+
+        ExamUser updatedUser = captor.getValue();
+        assertEquals(remainingTime, updatedUser.getRemainingTime());
+        assertTrue(updatedUser.getIsFinished());
+        assertNotNull(updatedUser.getTimeFinish());
+        assertEquals(generateAnswerSheetString(5),  updatedUser.getAnswerSheet());
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_033: Trường hợp lưu user exam khi user exam đã finished rồi " +
+            " --> trả về IllegalStateException")
+    public void saveUserExamAnswer_userExamHasFinished() throws Exception {
+        //arrange
+        Authentication auth = mock(Authentication.class);
+        SecurityContext securityContext = mock(SecurityContext.class);
+        SecurityContextHolder.setContext(securityContext);
+        String username = "student1";
+
+        when(securityContext.getAuthentication()).thenReturn(auth);
+        when(auth.getName()).thenReturn(username);
+
+        Exam exam = new Exam();
+        exam.setId(1L);
+
+        ExamUser examUser = new ExamUser();
+        examUser.setId(1L);
+        examUser.setIsFinished(true);
+
+        when(examUserService.findByExamAndUser(1L, username)).thenReturn(examUser);
+
+        List<AnswerSheet> answerSheets = generateAnswerSheet(5);
+        Long examId = 1L;
+        boolean isFinish = true;
+        int remainingTime = 1000000;
+
+        //assert
+        assertThrows(IllegalStateException.class, () -> examController.saveUserExamAnswer(answerSheets, examId, isFinish, remainingTime));
+        verify(examUserService, times(1)).findByExamAndUser(examId, username);
+        verify(examUserService, times(1)).update(examUser);
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_034: Trường hợp không tìm thấy exam user --> trả về EntityNotFoundException")
+    public void saveUserExamAnswer_notFoundExamUser() throws Exception {
+        //arrange
+        Authentication auth = mock(Authentication.class);
+        SecurityContext securityContext = mock(SecurityContext.class);
+        SecurityContextHolder.setContext(securityContext);
+        String username = "student1";
+
+        when(securityContext.getAuthentication()).thenReturn(auth);
+        when(auth.getName()).thenReturn(username);
+
+        Exam exam = new Exam();
+        exam.setId(1L);
+
+        List<AnswerSheet> answerSheets = generateAnswerSheet(5);
+        Long examId = 1L;
+        boolean isFinish = true;
+        int remainingTime = 1000000;
+
+        //assert
+        assertThrows(EntityNotFoundException.class, () -> examController.saveUserExamAnswer(answerSheets, examId, isFinish, remainingTime));
+        verify(examUserService, times(1)).findByExamAndUser(examId, username);
+    }
+
+    @Test
+    @DisplayName("UT_EM_035: Trưòng hợp lấy ra danh sách ExamResult có 1 ExamResult" +
+            " chứa 1 examUser hết giờ mà chưa bắt đầu làm bài" +
+            " --> Trả về response chứa danh sách ExamResult có 1 examResult với status -2")
+    public void getResultExamAll_1ExamUserStatus_2() throws Exception {
+        //arrange
+        Long examId = 1L;
+        Exam exam = createExamWithTime(false, false, -600000L, 0L, null, 600000);
+        exam.setId(examId);
+        String questionData = generateExamQuestionPointString(5);
+        exam.setQuestionData(questionData);
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
+
+        User user = userWithRoles(ERole.ROLE_ADMIN);
+        user.setId(1L);
+        ExamUser examUser = createExamUser(exam, user, false, false,
+                600000, null, -1.0);
+        when(examUserService.findAllByExam_Id(examId)).thenReturn(Arrays.asList(examUser));
+
+
+        //act
+        ResponseEntity response = examController.getResultExamAll(examId);
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody() instanceof List);
+        assertTrue(((List)response.getBody()).get(0) instanceof ExamResult);
+        ExamResult examResult = (ExamResult) ((List<?>) response.getBody()).get(0);
+        assertEquals(examResult.getUser().getId(), user.getId());
+        assertEquals(-2, examResult.getExamStatus());
+        assertEquals(examUser.getTimeStart(), examResult.getUserTimeBegin());
+        assertEquals(examUser.getTimeFinish(), examResult.getUserTimeFinish());
+        assertNull(examResult.getTotalPoint());
+        verify(examService, times(1)).getExamById(examId);
+        verify(examUserService, times(1)).findAllByExam_Id(examId);
+    }
+
+    @Test
+    @DisplayName("UT_EM_036: Trưòng hợp lấy ra danh sách ExamResult có 1 ExamResult " +
+            "chưa bắt đầu làm bài nhưng còn thời gian " +
+            "--> Trả về response chứa examResult với status 0")
+    public void getResultExamAll_1ExamUserStatus0() throws Exception {
+        //arrange
+        Long examId = 1L;
+        Exam exam = createExamWithTime(false, false, -600000L, 600000L, null, 600000);
+        exam.setId(examId);
+        String questionData = generateExamQuestionPointString(5);
+        exam.setQuestionData(questionData);
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
+
+        User user = userWithRoles(ERole.ROLE_ADMIN);
+        user.setId(1L);
+        ExamUser examUser = createExamUser(exam, user, false, false,
+                600000, null, -1.0);
+        when(examUserService.findAllByExam_Id(examId)).thenReturn(Arrays.asList(examUser));
+
+
+        //act
+        ResponseEntity response = examController.getResultExamAll(examId);
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody() instanceof List);
+        assertTrue(((List)response.getBody()).get(0) instanceof ExamResult);
+        ExamResult examResult = (ExamResult) ((List<?>) response.getBody()).get(0);
+        assertEquals(examResult.getUser().getId(), user.getId());
+        assertEquals(0, examResult.getExamStatus());
+        assertEquals(examUser.getTimeStart(), examResult.getUserTimeBegin());
+        assertEquals(examUser.getTimeFinish(), examResult.getUserTimeFinish());
+        assertNull(examResult.getTotalPoint());
+        verify(examService, times(1)).getExamById(examId);
+        verify(examUserService, times(1)).findAllByExam_Id(examId);
+    }
+
+    @Test
+    @DisplayName("UT_EM_037: Trưòng hợp lấy ra danh sách ExamResult có 1 ExamResult đã nộp bài," +
+            " lần đầu xem kết quả, chứa 5 câu trả lời đúng --> " +
+            "Trả về response chứa examResult với status -1, tính tổng điểm chính xác bằng điểm 5 câu hỏi," +
+            "cập nhật lại điểm của examUser")
+    public void getResultExamAll_1ExamUserStatus_1_5ChoiceCorrect() throws Exception {
+        //arrange
+        Long examId = 1L;
+        Exam exam = createExamWithTime(false, false, -600000L, 600000L, null, 600000);
+        exam.setId(examId);
+        String questionData = generateExamQuestionPointString(5);
+        exam.setQuestionData(questionData);
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
+
+        User user = userWithRoles(ERole.ROLE_ADMIN);
+        user.setId(1L);
+
+        ExamUser examUser = createExamUser(exam, user, true, true,
+                600000, null, -1.0);
+        String answerData = generateAnswerSheetString(5);
+        examUser.setAnswerSheet(answerData);
+
+        when(examUserService.findAllByExam_Id(examId)).thenReturn(Arrays.asList(examUser));
+
+        List<ChoiceList> choiceLists = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            choiceLists.add(createChoiceList((long) i, 10, true));
+        }
+
+        when(examService.getChoiceList(anyList(), anyList())).thenReturn(choiceLists);
+
+
+        //act
+        ResponseEntity response = examController.getResultExamAll(examId);
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody() instanceof List);
+        assertTrue(((List)response.getBody()).get(0) instanceof ExamResult);
+        ExamResult examResult = (ExamResult) ((List<?>) response.getBody()).get(0);
+        assertEquals(examResult.getUser().getId(), user.getId());
+        assertEquals(-1, examResult.getExamStatus());
+        assertEquals(examUser.getTimeStart(), examResult.getUserTimeBegin());
+        assertEquals(examUser.getTimeFinish(), examResult.getUserTimeFinish());
+        assertEquals(50, examResult.getTotalPoint());
+        verify(examService, times(1)).getExamById(examId);
+        verify(examUserService, times(1)).findAllByExam_Id(examId);
+        verify(examUserService, times(1)).update(examUser);
+        verify(examService, times(1)).getChoiceList(anyList(), anyList());
+    }
+
+    @Test
+    @DisplayName("UT_EM_038: Trưòng hợp lấy ra danh sách ExamResult có 1 ExamResult đã nộp bài," +
+            " lần đầu xem kết quả, chứa 5 câu trả lời sai --> " +
+            "Trả về response chứa examResult với status -1, tính tổng điểm chính xác bằng 0," +
+            "cập nhật lại điểm của examUser")
+    public void getResultExamAll_1ExamUserStatus_1_5ChoiceWrong() throws Exception {
+        //arrange
+        Long examId = 1L;
+        Exam exam = createExamWithTime(false, false, -600000L, 600000L, null, 600000);
+        exam.setId(examId);
+        String questionData = generateExamQuestionPointString(5);
+        exam.setQuestionData(questionData);
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
+
+        User user = userWithRoles(ERole.ROLE_ADMIN);
+        user.setId(1L);
+
+        ExamUser examUser = createExamUser(exam, user, true, true,
+                600000, null, -1.0);
+        String answerData = generateAnswerSheetString(5);
+        examUser.setAnswerSheet(answerData);
+
+        when(examUserService.findAllByExam_Id(examId)).thenReturn(Arrays.asList(examUser));
+
+        List<ChoiceList> choiceLists = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            choiceLists.add(createChoiceList((long) i, 10, false));
+        }
+
+        when(examService.getChoiceList(anyList(), anyList())).thenReturn(choiceLists);
+
+
+        //act
+        ResponseEntity response = examController.getResultExamAll(examId);
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody() instanceof List);
+        assertTrue(((List)response.getBody()).get(0) instanceof ExamResult);
+        ExamResult examResult = (ExamResult) ((List<?>) response.getBody()).get(0);
+        assertEquals(examResult.getUser().getId(), user.getId());
+        assertEquals(-1, examResult.getExamStatus());
+        assertEquals(examUser.getTimeStart(), examResult.getUserTimeBegin());
+        assertEquals(examUser.getTimeFinish(), examResult.getUserTimeFinish());
+        assertEquals(0, examResult.getTotalPoint());
+        verify(examService, times(1)).getExamById(examId);
+        verify(examUserService, times(1)).findAllByExam_Id(examId);
+        verify(examUserService, times(1)).update(examUser);
+        verify(examService, times(1)).getChoiceList(anyList(), anyList());
+    }
+
+    @Test
+    @DisplayName("UT_EM_039: Trưòng hợp lấy ra danh sách ExamResult có 1 ExamResult đã nộp bài, " +
+            "không phải lần đầu xem kết quả, chứa 5 câu trả lời đúng --> " +
+            "Trả về response chứa examResult với status -1, tính tổng điểm chính xác bằng điểm 5 câu hỏi," +
+            "không cập nhật lại điểm của examUser")
+    public void getResultExamAll_1ExamUserStatus_1_5ChoiceCorrect_NotFirst() throws Exception {
+        //arrange
+        Long examId = 1L;
+        Exam exam = createExamWithTime(false, false, -600000L, 600000L, null, 600000);
+        exam.setId(examId);
+        String questionData = generateExamQuestionPointString(5);
+        exam.setQuestionData(questionData);
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
+
+        User user = userWithRoles(ERole.ROLE_ADMIN);
+        user.setId(1L);
+
+        ExamUser examUser = createExamUser(exam, user, true, true,
+                600000, null, 50.0);
+        String answerData = generateAnswerSheetString(5);
+        examUser.setAnswerSheet(answerData);
+
+        when(examUserService.findAllByExam_Id(examId)).thenReturn(Arrays.asList(examUser));
+
+        List<ChoiceList> choiceLists = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            choiceLists.add(createChoiceList((long) i, 50, true));
+        }
+
+        when(examService.getChoiceList(anyList(), anyList())).thenReturn(choiceLists);
+
+
+        //act
+        ResponseEntity response = examController.getResultExamAll(examId);
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody() instanceof List);
+        assertTrue(((List)response.getBody()).get(0) instanceof ExamResult);
+        ExamResult examResult = (ExamResult) ((List<?>) response.getBody()).get(0);
+        assertEquals(examResult.getUser().getId(), user.getId());
+        assertEquals(-1, examResult.getExamStatus());
+        assertEquals(examUser.getTimeStart(), examResult.getUserTimeBegin());
+        assertEquals(examUser.getTimeFinish(), examResult.getUserTimeFinish());
+        assertEquals(50, examResult.getTotalPoint());
+
+        verify(examService, times(1)).getExamById(examId);
+        verify(examUserService, times(1)).findAllByExam_Id(examId);
+        verify(examService, times(1)).getChoiceList(anyList(), anyList());
+        verify(examUserService, never()).update(examUser);
+    }
+
+    @Test
+    @DisplayName("UT_EM_040: Trưòng hợp lấy ra danh sách ExamResult có 1 ExamResult đã nộp bài, " +
+            "không phải lần đầu xem kết quả, chứa 5 câu trả lời sai --> " +
+            "Trả về response chứa examResult với status -1, tính tổng điểm chính xác bằng điểm 5 câu hỏi," +
+            "không cập nhật lại điểm của examUser")
+    public void getResultExamAll_1ExamUserStatus_1_5ChoiceWrong_NotFirst() throws Exception {
+        //arrange
+        Long examId = 1L;
+        Exam exam = createExamWithTime(false, false, -600000L, 600000L, null, 600000);
+        exam.setId(examId);
+        String questionData = generateExamQuestionPointString(5);
+        exam.setQuestionData(questionData);
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
+
+        User user = userWithRoles(ERole.ROLE_ADMIN);
+        user.setId(1L);
+
+        ExamUser examUser = createExamUser(exam, user, true, true,
+                600000, null, 0.0);
+        String answerData = generateAnswerSheetString(5);
+        examUser.setAnswerSheet(answerData);
+
+        when(examUserService.findAllByExam_Id(examId)).thenReturn(Arrays.asList(examUser));
+
+        List<ChoiceList> choiceLists = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            choiceLists.add(createChoiceList((long) i, 10, false));
+        }
+
+        when(examService.getChoiceList(anyList(), anyList())).thenReturn(choiceLists);
+
+
+        //act
+        ResponseEntity response = examController.getResultExamAll(examId);
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody() instanceof List);
+        assertTrue(((List)response.getBody()).get(0) instanceof ExamResult);
+        ExamResult examResult = (ExamResult) ((List<?>) response.getBody()).get(0);
+        assertEquals(examResult.getUser().getId(), user.getId());
+        assertEquals(-1, examResult.getExamStatus());
+        assertEquals(examUser.getTimeStart(), examResult.getUserTimeBegin());
+        assertEquals(examUser.getTimeFinish(), examResult.getUserTimeFinish());
+        assertEquals(0, examResult.getTotalPoint());
+
+        verify(examService, times(1)).getExamById(examId);
+        verify(examUserService, times(1)).findAllByExam_Id(examId);
+        verify(examService, times(1)).getChoiceList(anyList(), anyList());
+        verify(examUserService, times(1)).update(examUser);
+    }
+
+    @Test
+    @DisplayName("UT_EM_041: Trưòng hợp lấy ra danh sách ExamResult có 1 ExamResult đang làm bài," +
+            " lần đầu xem kết quả, chứa 5 câu trả lời đúng --> " +
+            "Trả về response chứa examResult với status 1, tính tổng điểm chính xác bằng điểm 5 câu hỏi," +
+            "cập nhật lại điểm của examUser")
+    public void getResultExamAll_1ExamUserStatus1_5ChoiceCorrect() throws Exception {
+        //arrange
+        Long examId = 1L;
+        Exam exam = createExamWithTime(false, false, -600000L, 600000L, null, 600000);
+        exam.setId(examId);
+        String questionData = generateExamQuestionPointString(5);
+        exam.setQuestionData(questionData);
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
+
+        User user = userWithRoles(ERole.ROLE_ADMIN);
+        user.setId(1L);
+
+        ExamUser examUser = createExamUser(exam, user, true, false,
+                600000, null, -1.0);
+        String answerData = generateAnswerSheetString(5);
+        examUser.setAnswerSheet(answerData);
+
+        when(examUserService.findAllByExam_Id(examId)).thenReturn(Arrays.asList(examUser));
+
+        List<ChoiceList> choiceLists = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            choiceLists.add(createChoiceList((long) i, 10, true));
+        }
+
+        when(examService.getChoiceList(anyList(), anyList())).thenReturn(choiceLists);
+
+
+        //act
+        ResponseEntity response = examController.getResultExamAll(examId);
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody() instanceof List);
+        assertTrue(((List)response.getBody()).get(0) instanceof ExamResult);
+        ExamResult examResult = (ExamResult) ((List<?>) response.getBody()).get(0);
+        assertEquals(examResult.getUser().getId(), user.getId());
+        assertEquals(1, examResult.getExamStatus());
+        assertEquals(examUser.getTimeStart(), examResult.getUserTimeBegin());
+        assertEquals(examUser.getTimeFinish(), examResult.getUserTimeFinish());
+        assertEquals(50, examResult.getTotalPoint());
+
+        verify(examService, times(1)).getExamById(examId);
+        verify(examUserService, times(1)).findAllByExam_Id(examId);
+        verify(examService, times(1)).getChoiceList(anyList(), anyList());
+
+        ArgumentCaptor<ExamUser> examUserCaptor = ArgumentCaptor.forClass(ExamUser.class);
+        verify(examUserService, times(1)).update(examUserCaptor.capture());
+        assertEquals(50, examUserCaptor.getValue().getTotalPoint());
+    }
+
+    @Test
+    @DisplayName("UT_EM_042: Trưòng hợp lấy ra danh sách ExamResult có 1 ExamResult đang làm bài," +
+            " lần đầu xem kết quả, chứa 5 câu trả lời sai --> " +
+            "Trả về response chứa examResult với status 1, tính tổng điểm chính xác bằng điểm 5 câu hỏi," +
+            "cập nhật lại điểm của examUser")
+    public void getResultExamAll_1ExamUserStatus1_5ChoiceWrong() throws Exception {
+        //arrange
+        Long examId = 1L;
+        Exam exam = createExamWithTime(false, false, -600000L, 600000L, null, 600000);
+        exam.setId(examId);
+        String questionData = generateExamQuestionPointString(5);
+        exam.setQuestionData(questionData);
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
+
+        User user = userWithRoles(ERole.ROLE_ADMIN);
+        user.setId(1L);
+
+        ExamUser examUser = createExamUser(exam, user, true, false,
+                600000, null, -1.0);
+        String answerData = generateAnswerSheetString(5);
+        examUser.setAnswerSheet(answerData);
+
+        when(examUserService.findAllByExam_Id(examId)).thenReturn(Arrays.asList(examUser));
+
+        List<ChoiceList> choiceLists = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            choiceLists.add(createChoiceList((long) i, 10, false));
+        }
+
+        when(examService.getChoiceList(anyList(), anyList())).thenReturn(choiceLists);
+
+
+        //act
+        ResponseEntity response = examController.getResultExamAll(examId);
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody() instanceof List);
+        assertTrue(((List)response.getBody()).get(0) instanceof ExamResult);
+        ExamResult examResult = (ExamResult) ((List<?>) response.getBody()).get(0);
+        assertEquals(examResult.getUser().getId(), user.getId());
+        assertEquals(1, examResult.getExamStatus());
+        assertEquals(examUser.getTimeStart(), examResult.getUserTimeBegin());
+        assertEquals(examUser.getTimeFinish(), examResult.getUserTimeFinish());
+        assertEquals(0, examResult.getTotalPoint());
+
+        verify(examService, times(1)).getExamById(examId);
+        verify(examUserService, times(1)).findAllByExam_Id(examId);
+        verify(examService, times(1)).getChoiceList(anyList(), anyList());
+
+        ArgumentCaptor<ExamUser> examUserCaptor = ArgumentCaptor.forClass(ExamUser.class);
+        verify(examUserService, times(1)).update(examUserCaptor.capture());
+        assertEquals(0, examUserCaptor.getValue().getTotalPoint());
+    }
+
+    @Test
+    @DisplayName("UT_EM_043: Trưòng hợp lấy ra danh sách ExamResult có 1 ExamResult đang làm bài, " +
+            "không phải lần đầu xem kết quả, chứa 5 câu trả lời đúng --> " +
+            "Trả về response chứa examResult với status 1, tính tổng điểm chính xác bằng điểm 5 câu hỏi," +
+            "cập nhật lại điểm của examUser")
+    public void getResultExamAll_1ExamUserStatus1_5ChoiceCorrect_notFirst() throws Exception {
+        //arrange
+        Long examId = 1L;
+        Exam exam = createExamWithTime(false, false, -600000L, 600000L, null, 600000);
+        exam.setId(examId);
+        String questionData = generateExamQuestionPointString(5);
+        exam.setQuestionData(questionData);
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
+
+        User user = userWithRoles(ERole.ROLE_ADMIN);
+        user.setId(1L);
+
+        ExamUser examUser = createExamUser(exam, user, true, false,
+                600000, null, 10.0);
+        String answerData = generateAnswerSheetString(5);
+        examUser.setAnswerSheet(answerData);
+
+        when(examUserService.findAllByExam_Id(examId)).thenReturn(Arrays.asList(examUser));
+
+        List<ChoiceList> choiceLists = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            choiceLists.add(createChoiceList((long) i, 10, true));
+        }
+
+        when(examService.getChoiceList(anyList(), anyList())).thenReturn(choiceLists);
+
+
+        //act
+        ResponseEntity response = examController.getResultExamAll(examId);
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody() instanceof List);
+        assertTrue(((List)response.getBody()).get(0) instanceof ExamResult);
+        ExamResult examResult = (ExamResult) ((List<?>) response.getBody()).get(0);
+        assertEquals(examResult.getUser().getId(), user.getId());
+        assertEquals(1, examResult.getExamStatus());
+        assertEquals(examUser.getTimeStart(), examResult.getUserTimeBegin());
+        assertEquals(examUser.getTimeFinish(), examResult.getUserTimeFinish());
+        assertEquals(50, examResult.getTotalPoint());
+
+        verify(examService, times(1)).getExamById(examId);
+        verify(examUserService, times(1)).findAllByExam_Id(examId);
+        verify(examService, times(1)).getChoiceList(anyList(), anyList());
+
+        ArgumentCaptor<ExamUser> examUserCaptor = ArgumentCaptor.forClass(ExamUser.class);
+        verify(examUserService, times(1)).update(examUserCaptor.capture());
+        assertEquals(50, examUserCaptor.getValue().getTotalPoint());
+    }
+
+    @Test
+    @DisplayName("UT_EM_044: Trưòng hợp lấy ra danh sách ExamResult có 1 ExamResult đang làm bài, " +
+            "không phải lần đầu xem kết quả, chứa 5 câu trả lời sai --> " +
+            "Trả về response chứa examResult với status 1, tính tổng điểm chính xác bằng điểm 5 câu hỏi," +
+            "cập nhật lại điểm của examUser")
+    public void getResultExamAll_1ExamUserStatus1_5ChoiceWrong_notFirst() throws Exception {
+        //arrange
+        Long examId = 1L;
+        Exam exam = createExamWithTime(false, false, -600000L, 600000L, null, 600000);
+        exam.setId(examId);
+        String questionData = generateExamQuestionPointString(5);
+        exam.setQuestionData(questionData);
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
+
+        User user = userWithRoles(ERole.ROLE_ADMIN);
+        user.setId(1L);
+
+        ExamUser examUser = createExamUser(exam, user, true, false,
+                600000, null, 10.0);
+        String answerData = generateAnswerSheetString(5);
+        examUser.setAnswerSheet(answerData);
+
+        when(examUserService.findAllByExam_Id(examId)).thenReturn(Arrays.asList(examUser));
+
+        List<ChoiceList> choiceLists = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            choiceLists.add(createChoiceList((long) i, 10, false));
+        }
+
+        when(examService.getChoiceList(anyList(), anyList())).thenReturn(choiceLists);
+
+
+        //act
+        ResponseEntity response = examController.getResultExamAll(examId);
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody() instanceof List);
+        assertTrue(((List)response.getBody()).get(0) instanceof ExamResult);
+        ExamResult examResult = (ExamResult) ((List<?>) response.getBody()).get(0);
+        assertEquals(examResult.getUser().getId(), user.getId());
+        assertEquals(1, examResult.getExamStatus());
+        assertEquals(examUser.getTimeStart(), examResult.getUserTimeBegin());
+        assertEquals(examUser.getTimeFinish(), examResult.getUserTimeFinish());
+        assertEquals(0, examResult.getTotalPoint());
+
+        verify(examService, times(1)).getExamById(examId);
+        verify(examUserService, times(1)).findAllByExam_Id(examId);
+        verify(examService, times(1)).getChoiceList(anyList(), anyList());
+
+        ArgumentCaptor<ExamUser> examUserCaptor = ArgumentCaptor.forClass(ExamUser.class);
+        verify(examUserService, times(1)).update(examUserCaptor.capture());
+        assertEquals(0, examUserCaptor.getValue().getTotalPoint());
+    }
+
+    @Test
+    @DisplayName("UT_EM_045: Trưòng hợp lấy ra danh sách ExamResult có 1 ExamResult đang làm bài, " +
+            "chưa lưu đáp án --> " +
+            "Trả về response chứa examResult với status 1, tổng điểm bằng null,")
+    public void getResultExamAll_1ExamUserStatus1_notSave() throws Exception {
+        //arrange
+        Long examId = 1L;
+        Exam exam = createExamWithTime(false, false, -600000L, 600000L, null, 600000);
+        exam.setId(examId);
+        String questionData = generateExamQuestionPointString(5);
+        exam.setQuestionData(questionData);
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
+
+        User user = userWithRoles(ERole.ROLE_ADMIN);
+        user.setId(1L);
+
+        ExamUser examUser = createExamUser(exam, user, true, false,
+                600000, null, -1.0);
+
+        when(examUserService.findAllByExam_Id(examId)).thenReturn(Arrays.asList(examUser));
+
+
+        //act
+        ResponseEntity response = examController.getResultExamAll(examId);
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody() instanceof List);
+        assertTrue(((List)response.getBody()).get(0) instanceof ExamResult);
+        ExamResult examResult = (ExamResult) ((List<?>) response.getBody()).get(0);
+        assertEquals(examResult.getUser().getId(), user.getId());
+        assertEquals(1, examResult.getExamStatus());
+        assertEquals(examUser.getTimeStart(), examResult.getUserTimeBegin());
+        assertEquals(examUser.getTimeFinish(), examResult.getUserTimeFinish());
+        assertNull(examResult.getTotalPoint());
+
+        verify(examService, times(1)).getExamById(examId);
+        verify(examUserService, times(1)).findAllByExam_Id(examId);
+        verify(examService, never()).getChoiceList(anyList(), anyList());
+        verify(examUserService, never()).update(examUser);
+    }
+
+    @Test
+    @DisplayName("UT_EM_046:  Trưòng hợp lấy ra danh sách ExamResult có 5 ExamResult không làm bài " +
+            "--> Trả về response chứa 5 examResult với status -2, tổng điểm bằng -1.0")
+    public void getResultExamAll_With5ExamUsers() throws Exception {
+        // arrange
+        Long examId = 1L;
+
+        Exam exam = createExamWithTime(false, false, -1200000L, -600000L, null, 600000);
+        exam.setId(examId);
+        exam.setQuestionData(generateExamQuestionPointString(5));
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
+
+
+        List<User> users = new ArrayList<>();
+        for (int i = 0; i < 5; ++i) {
+            User user = userWithRoles(ERole.ROLE_STUDENT);
+            user.setId((long) i);
+            users.add(user);
+        }
+
+        List<ExamUser> examUsers = new ArrayList<>();
+        for (int i = 0; i < 5; ++i) {
+            ExamUser examUser = createExamUser(exam, users.get(i), false, false, 60000, null, null);
+            examUsers.add(examUser);
+        }
+
+        when(examUserService.findAllByExam_Id(examId)).thenReturn(examUsers);
+
+        //act
+        ResponseEntity response = examController.getResultExamAll(examId);
+
+        // assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        List<ExamResult> results = (List<ExamResult>) response.getBody();
+
+        assertNotNull(results);
+        assertEquals(5, results.size());
+
+        assertEquals(-2, results.get(0).getExamStatus());
+        assertEquals(-2, results.get(4).getExamStatus());
+
+        verify(examService, times(1)).getExamById(examId);
+        verify(examUserService, times(1)).findAllByExam_Id(examId);
+    }
+
+    @Test
+    @DisplayName("UT_EM_047: Trưòng hợp không tìm thấy Exam --> Trả về EntityNotFoundException")
+    public void getResultExamAll_notFoundExam() throws Exception {
+        // arrange
+        Long examId = 999L;
+
+        // assert
+        assertThrows(EntityNotFoundException.class, () -> examController.getResultExamAll(examId));
+
+        verify(examService, times(1)).getExamById(examId);
+    }
+
+    @Test
+    @DisplayName("UT_EM_048: Trường hợp có 1 user exam, 1 choiceList, và choice đúng " +
+            "--> Trả về response chứa 1 question exam report, tổng số trả lời đúng là 1")
+    public void getResultExamQuestionReport_1ExamUser_Has1ChoiceList_choiceCorrect() throws Exception {
+        //arrange
+        Exam exam = new Exam();
+        Long examId = 1L;
+        String questionData = generateExamQuestionPointString(1);
+        exam.setId(examId);
+        exam.setQuestionData(questionData);
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
+
+        String answerSheet = generateAnswerSheetString(1);
+        ExamUser examUser = createExamUser(exam, new User(), true, true, 0, answerSheet, 10.0);
+        when(examUserService.findExamUsersByIsFinishedIsTrueAndExam_Id(examId)).thenReturn(Arrays.asList(examUser));
+
+        ChoiceList choiceList = createChoiceList(1L, 10, true);
+        List<ChoiceList> choiceLists = Arrays.asList(choiceList);
+        when(examService.getChoiceList(anyList(), anyList())).thenReturn(choiceLists);
+
+        //act
+        ResponseEntity response = examController.getResultExamQuestionsReport(examId);
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody() instanceof List);
+        assertTrue(((List)response.getBody()).get(0) instanceof QuestionExamReport);
+
+        List<QuestionExamReport> questionExamReports = (List<QuestionExamReport>) response.getBody();
+        QuestionExamReport questionExamReport = questionExamReports.get(0);
+        assertEquals(1, questionExamReports.size());
+        assertEquals(1, questionExamReport.getCorrectTotal());
+
+        verify(examService, times(1)).getExamById(examId);
+        verify(examUserService, times(1)).findExamUsersByIsFinishedIsTrueAndExam_Id(examId);
+        verify(examService, times(1)).getChoiceList(anyList(), anyList());
+    }
+
+    @Test
+    @DisplayName("UT_EM_049: Trường hợp có 1 user exam, 1 choiceList, và choice sai " +
+            "--> Trả về response chứa 1 question exam report, tổng số trả lời đúng là 0")
+    public void getResultExamQuestionReport_1ExamUser_Has1ChoiceList_choiceWrong() throws Exception {
+        //arrange
+        Exam exam = new Exam();
+        Long examId = 1L;
+        String questionData = generateExamQuestionPointString(1);
+        exam.setId(examId);
+        exam.setQuestionData(questionData);
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
+
+        String answerSheet = generateAnswerSheetString(1);
+        ExamUser examUser = createExamUser(exam, new User(), true, true, 0, answerSheet, 10.0);
+        when(examUserService.findExamUsersByIsFinishedIsTrueAndExam_Id(examId)).thenReturn(Arrays.asList(examUser));
+
+        ChoiceList choiceList = createChoiceList(1L, 10, false);
+        List<ChoiceList> choiceLists = Arrays.asList(choiceList);
+        when(examService.getChoiceList(anyList(), anyList())).thenReturn(choiceLists);
+
+        //act
+        ResponseEntity response = examController.getResultExamQuestionsReport(examId);
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody() instanceof List);
+        assertTrue(((List)response.getBody()).get(0) instanceof QuestionExamReport);
+
+        List<QuestionExamReport> questionExamReports = (List<QuestionExamReport>) response.getBody();
+        QuestionExamReport questionExamReport = questionExamReports.get(0);
+        assertEquals(1, questionExamReports.size());
+        assertEquals(0, questionExamReport.getCorrectTotal());
+
+        verify(examService, times(1)).getExamById(examId);
+        verify(examUserService, times(1)).findExamUsersByIsFinishedIsTrueAndExam_Id(examId);
+        verify(examService, times(1)).getChoiceList(anyList(), anyList());
+    }
+
+    @Test
+    @DisplayName("UT_EM_050: Trường hợp có 5 user exam, mỗi user exam có 1 choiceList," +
+            " và 3 choice đúng, 2 choice sai " +
+            "--> Trả về response chứa 1 question exam report, tổng số trả lời đúng là 3")
+    public void getResultExamQuestionReport_5ExamUser_Has1ChoiceList_3Correcr2Wrong() throws Exception {
+        //arrange
+        Exam exam = new Exam();
+        Long examId = 1L;
+        String questionData = generateExamQuestionPointString(1);
+        exam.setId(examId);
+        exam.setQuestionData(questionData);
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
+
+        String answerSheet = generateAnswerSheetString(1);
+
+        List<ExamUser> examUsers = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            examUsers.add(createExamUser(exam, new User(), true, true, 0, generateAnswerSheetString(1), 10.0));
+        }
+        when(examUserService.findExamUsersByIsFinishedIsTrueAndExam_Id(examId)).thenReturn(examUsers);
+
+        ChoiceList correctChoice = createChoiceList(1L, 10, true);
+        ChoiceList wrongChoice = createChoiceList(1L, 10, false);
+
         when(examService.getChoiceList(anyList(), anyList()))
-                .thenReturn(Arrays.asList(firstUserChoiceList), Arrays.asList(secondUserChoiceList));
+                .thenReturn(Arrays.asList(correctChoice))
+                .thenReturn(Arrays.asList(correctChoice))
+                .thenReturn(Arrays.asList(correctChoice))
+                .thenReturn(Arrays.asList(wrongChoice))
+                .thenReturn(Arrays.asList(wrongChoice));
 
-        ResponseEntity response = examController.getResultExamQuestionsReport(1L);
+        //act
+        ResponseEntity response = examController.getResultExamQuestionsReport(examId);
 
+        //assert
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        @SuppressWarnings("unchecked")
-        List<QuestionExamReport> reports = (List<QuestionExamReport>) response.getBody();
-        assertNotNull(reports);
-        assertEquals(1, reports.size());
-        assertEquals("Theo chuẩn phải chỉ có 1 user trả lời đúng", 1, reports.get(0).getCorrectTotal());
+        assertTrue(response.getBody() instanceof List);
+        assertTrue(((List)response.getBody()).get(0) instanceof QuestionExamReport);
+
+        List<QuestionExamReport> questionExamReports = (List<QuestionExamReport>) response.getBody();
+        QuestionExamReport questionExamReport = questionExamReports.get(0);
+        assertEquals(1, questionExamReports.size());
+        assertEquals(3, questionExamReport.getCorrectTotal());
+
+        verify(examService, times(1)).getExamById(examId);
+        verify(examUserService, times(1)).findExamUsersByIsFinishedIsTrueAndExam_Id(examId);
+        verify(examService, times(5)).getChoiceList(anyList(), anyList());
     }
 
-    /**
-     * UT_EM_031: Lấy kết quả theo user khi exam không tồn tại
-     * Mô tả: Endpoint phải trả 404 nếu examId không tồn tại
-     * Input: examId=999, username=student01
-     * Expected: Response 404
-     */
     @Test
-    public void UT_EM_031_getResultExamByUser_examNotFound_shouldReturn404() throws IOException {
-        logger.info("[UT_EM_031] BẮT ĐẦU: getResultExamByUser khi exam không tồn tại");
+    @DisplayName("UT_EM_051: Trường hợp có 1 user exam, mỗi user exam có 5 choiceList," +
+            " và 3 choice đúng, 2 choice sai " +
+            "--> Trả về response chứa 5 question exam report," +
+            " 3 question exam report có 1 câu đúng," +
+            " 2 question exam report có 0 câu đúng")
+    public void getResultExamQuestionReport_1ExamUser_Has5ChoiceList_3Correcr2Wrong() throws Exception {
+        //arrange
+        Exam exam = new Exam();
+        Long examId = 1L;
+        String questionData = generateExamQuestionPointString(1);
+        exam.setId(examId);
+        exam.setQuestionData(questionData);
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
 
-        when(examService.getExamById(999L)).thenReturn(Optional.empty());
-        when(userService.getUserByUsername("student01")).thenReturn(Optional.of(studentUser));
+        String answerSheet = generateAnswerSheetString(1);
 
-        ResponseEntity response = examController.getResultExamByUser(999L, "student01");
+        ExamUser examUser = createExamUser(exam, new User(), true, true, 0, answerSheet, 10.0);
+        when(examUserService.findExamUsersByIsFinishedIsTrueAndExam_Id(examId)).thenReturn(Arrays.asList(examUser));
 
-        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+        List<ChoiceList> lists = new  ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            lists.add(createChoiceList((long) i, 10, true));
+        }
+        for (int i = 3; i < 5; i++) {
+            lists.add(createChoiceList((long) i, 10, false));
+        }
+
+        when(examService.getChoiceList(anyList(), anyList()))
+                .thenReturn(lists);
+
+        //act
+        ResponseEntity response = examController.getResultExamQuestionsReport(examId);
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody() instanceof List);
+        assertTrue(((List)response.getBody()).get(0) instanceof QuestionExamReport);
+
+        List<QuestionExamReport> questionExamReports = (List<QuestionExamReport>) response.getBody();
+        assertEquals(5, questionExamReports.size());
+        assertEquals(1, questionExamReports.get(0).getCorrectTotal());
+        assertEquals(1, questionExamReports.get(1).getCorrectTotal());
+        assertEquals(1, questionExamReports.get(2).getCorrectTotal());
+        assertEquals(0, questionExamReports.get(3).getCorrectTotal());
+        assertEquals(0, questionExamReports.get(4).getCorrectTotal());
+
+        verify(examService, times(1)).getExamById(examId);
+        verify(examUserService, times(1)).findExamUsersByIsFinishedIsTrueAndExam_Id(examId);
+        verify(examService, times(1)).getChoiceList(anyList(), anyList());
     }
 
-    /**
-     * UT_EM_032: Lấy kết quả theo user thành công
-     * Mô tả: Kiểm tra tổng điểm, thời lượng đã làm, thông tin user và cập nhật totalPoint lần đầu
-     * Input: exam hợp lệ, examUser có answerSheet đúng
-     * Expected: Response 200 chứa ExamResult đúng dữ liệu
-     */
     @Test
-    public void UT_EM_032_getResultExamByUser_success_shouldReturnComputedResult() throws IOException {
-        logger.info("[UT_EM_032] BẮT ĐẦU: getResultExamByUser phải tính điểm và thời lượng đã làm");
+    @DisplayName("UT_EM_052: Trường hợp có 1 user exam, mỗi user exam có 0 choiceList," +
+            "--> Trả về response chứa 0 question exam report")
+    public void getResultExamQuestionReport_1ExamUser_Has0ChoiceList() throws Exception {
+        //arrange
+        Exam exam = new Exam();
+        Long examId = 1L;
+        String questionData = generateExamQuestionPointString(1);
+        exam.setId(examId);
+        exam.setQuestionData(questionData);
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
 
-        sampleExam.setDurationExam(60);
-        sampleExamUser.setTimeStart(new Date(System.currentTimeMillis() - 1200000));
-        sampleExamUser.setTimeFinish(new Date());
-        sampleExamUser.setRemainingTime(2400);
-        sampleExamUser.setTotalPoint(-1.0);
-        sampleExamUser.setAnswerSheet("[{\"questionId\":1,\"choices\":[{\"id\":1,\"choiceText\":\"int\",\"isCorrected\":1}],\"point\":10}]");
+        String answerSheet = generateAnswerSheetString(1);
 
-        ChoiceList choiceList = new ChoiceList();
-        choiceList.setQuestion(sampleQuestion);
-        choiceList.setPoint(10);
-        choiceList.setIsSelectedCorrected(true);
+        ExamUser examUser = createExamUser(exam, new User(), true, true, 0, answerSheet, 10.0);
+        when(examUserService.findExamUsersByIsFinishedIsTrueAndExam_Id(examId)).thenReturn(Arrays.asList(examUser));
 
-        when(examService.getExamById(1L)).thenReturn(Optional.of(sampleExam));
-        when(userService.getUserByUsername("student01")).thenReturn(Optional.of(studentUser));
-        when(examUserService.findByExamAndUser(1L, "student01")).thenReturn(sampleExamUser);
-        when(examService.getChoiceList(anyList(), anyList())).thenReturn(Arrays.asList(choiceList));
+        List<ChoiceList> lists = new  ArrayList<>();
+        when(examService.getChoiceList(anyList(), anyList()))
+                .thenReturn(lists);
 
-        ResponseEntity response = examController.getResultExamByUser(1L, "student01");
+        //act
+        ResponseEntity response = examController.getResultExamQuestionsReport(examId);
 
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody() instanceof List);
+
+        List<QuestionExamReport> questionExamReports = (List<QuestionExamReport>) response.getBody();
+        assertEquals(0, questionExamReports.size());
+
+
+        verify(examService, times(1)).getExamById(examId);
+        verify(examUserService, times(1)).findExamUsersByIsFinishedIsTrueAndExam_Id(examId);
+        verify(examService, times(1)).getChoiceList(anyList(), anyList());
+    }
+
+    @Test
+    @DisplayName("UT_EM_053: Trường hợp có 0 user exam" +
+            "--> Trả về questionExamReports rỗng")
+    public void getResultExamQuestionReport_0ExamUser() throws Exception {
+        //arrange
+        Exam exam = new Exam();
+        Long examId = 1L;
+        String questionData = generateExamQuestionPointString(1);
+        exam.setId(examId);
+        exam.setQuestionData(questionData);
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
+
+
+        when(examUserService.findExamUsersByIsFinishedIsTrueAndExam_Id(examId)).thenReturn(new ArrayList<>());
+
+
+        //act
+        ResponseEntity response = examController.getResultExamQuestionsReport(examId);
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody() instanceof List);
+
+        List<QuestionExamReport> questionExamReports = (List<QuestionExamReport>) response.getBody();
+        assertEquals(0, questionExamReports.size());
+
+
+        verify(examService, times(1)).getExamById(examId);
+        verify(examUserService, times(1)).findExamUsersByIsFinishedIsTrueAndExam_Id(examId);
+    }
+
+    @Test
+    @DisplayName("UT_EM_054: Trường hợp có không tìm thấy exam" +
+            "--> Trả về EntityNotExistedException")
+    public void getResultExamQuestionReport_notFoundExam() throws Exception {
+        //arrange
+        Exam exam = new Exam();
+        Long examId = 999L;
+
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
+
+        //assert
+        assertThrows(EntityNotFoundException.class, () -> examController.getResultExamQuestionsReport(examId));
+
+        verify(examService, times(1)).getExamById(examId);
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_055: Trường hợp có 1 choice list, 1 choice đúng, lần đầu xem kết quả" +
+            "--> Trả về response chứa exam result, điểm bằng điểm câu trả lời đúng," +
+            " cập nhật exam user")
+    public void getResultExamByUser_1ChoiceList_1ChoiceCorrect() throws Exception {
+        //arrange
+        User user =  new User();
+        Long userId = 1L;
+        String username = "user01";
+        user.setId(userId);
+        user.setUsername(username);
+        when(userService.getUserByUsername(username)).thenReturn(Optional.of(user));
+
+        Long examId = 1L;
+        String questionData = generateExamQuestionPointString(1);
+        Exam exam = createExamWithTime(false, false, -600000L,
+                600000L, questionData, 60000);
+        exam.setId(examId);
+        when(examService.getExamById(exam.getId())).thenReturn(Optional.of(exam));
+
+        ExamUser examUser = createExamUser(exam, user, true, true, 0, questionData, -1.0);
+        when(examUserService.findByExamAndUser(examId, username)).thenReturn(examUser);
+
+        List<ChoiceList> lists = new  ArrayList<>();
+        ChoiceList choiceList = createChoiceList(1L, 10, true);
+        lists.add(choiceList);
+        when(examService.getChoiceList(anyList(), anyList())).thenReturn(lists);
+
+        //act
+        ResponseEntity response = examController.getResultExamByUser(userId, username);
+
+        //assert
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertTrue(response.getBody() instanceof ExamResult);
-        ExamResult result = (ExamResult) response.getBody();
-        assertEquals(Double.valueOf(10.0), result.getTotalPoint());
-        assertEquals(1200, result.getRemainingTime());
-        assertEquals(studentUser, result.getUser());
-        verify(examUserService, times(1)).update(sampleExamUser);
+
+        ExamResult examResult = (ExamResult) response.getBody();
+        assertEquals(examUser.getTimeFinish(), examResult.getUserTimeFinish());
+        assertEquals(examUser.getTimeStart(), examResult.getUserTimeBegin());
+        assertEquals(exam.getDurationExam() * 60 - examUser.getRemainingTime(), examResult.getRemainingTime());
+        assertEquals(10, examResult.getTotalPoint());
+        assertSame(choiceList, examResult.getChoiceList().get(0));
+
+        verify(examService, times(1)).getExamById(examId);
+        verify(userService, times(1)).getUserByUsername(username);
+        verify(examUserService, times(1)).findByExamAndUser(examId, username);
+        verify(examService, times(1)).getChoiceList(anyList(), anyList());
+        verify(examUserService, times(1)).update(examUser);
+
     }
 
-    /**
-     * UT_EM_033: Lấy danh sách text câu hỏi theo examId
-     * Mô tả: Trả về đầy đủ questionText, point, difficulty, questionType
-     * Input: exam có questionData hợp lệ
-     * Expected: List<ExamDetail> đúng nội dung
-     */
     @Test
-    public void UT_EM_033_getQuestionTextByExamId_shouldReturnExamDetails() throws IOException {
-        logger.info("[UT_EM_033] BẮT ĐẦU: getQuestionTextByExamId trả về chi tiết câu hỏi");
+    @DisplayName("UT_EM_056: Trường hợp có 1 choice list, 1 choice sai, lần đầu xem kết quả" +
+            "--> Trả về response chứa exam result, điểm bằng 0, " +
+            "cập nhật exam user")
+    public void getResultExamByUser_1ChoiceList_1ChoiceWrong() throws Exception {
+        //arrange
+        User user =  new User();
+        Long userId = 1L;
+        String username = "user01";
+        user.setId(userId);
+        user.setUsername(username);
+        when(userService.getUserByUsername(username)).thenReturn(Optional.of(user));
 
-        when(examService.getExamById(1L)).thenReturn(Optional.of(sampleExam));
-        when(questionService.getQuestionById(1L)).thenReturn(Optional.of(sampleQuestion));
+        Long examId = 1L;
+        String questionData = generateExamQuestionPointString(1);
+        Exam exam = createExamWithTime(false, false, -600000L,
+                600000L, questionData, 60000);
+        exam.setId(examId);
+        when(examService.getExamById(exam.getId())).thenReturn(Optional.of(exam));
 
-        List<ExamDetail> details = examController.getQuestionTextByExamId(1L);
+        ExamUser examUser = createExamUser(exam, user, true, true, 0, questionData, -1.0);
+        when(examUserService.findByExamAndUser(examId, username)).thenReturn(examUser);
 
-        assertNotNull(details);
-        assertEquals(1, details.size());
-        assertEquals(sampleQuestion.getQuestionText(), details.get(0).getQuestionText());
-        assertEquals(10, details.get(0).getPoint());
+        List<ChoiceList> lists = new  ArrayList<>();
+        ChoiceList choiceList = createChoiceList(1L, 10, false);
+        lists.add(choiceList);
+        when(examService.getChoiceList(anyList(), anyList())).thenReturn(lists);
+
+        //act
+        ResponseEntity response = examController.getResultExamByUser(userId, username);
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody() instanceof ExamResult);
+
+        ExamResult examResult = (ExamResult) response.getBody();
+        assertEquals(examUser.getTimeFinish(), examResult.getUserTimeFinish());
+        assertEquals(examUser.getTimeStart(), examResult.getUserTimeBegin());
+        assertEquals(exam.getDurationExam() * 60 - examUser.getRemainingTime(), examResult.getRemainingTime());
+        assertEquals(0, examResult.getTotalPoint());
+        assertSame(choiceList, examResult.getChoiceList().get(0));
+
+        verify(examService, times(1)).getExamById(examId);
+        verify(userService, times(1)).getUserByUsername(username);
+        verify(examUserService, times(1)).findByExamAndUser(examId, username);
+        verify(examService, times(1)).getChoiceList(anyList(), anyList());
+        verify(examUserService, times(1)).update(examUser);
+
     }
 
-    /**
-     * UT_EM_034: Lấy question text khi exam không tồn tại
-     * Mô tả: Kiểm tra nhánh lỗi Optional.get khi exam rỗng
-     * Input: examId=999
-     * Expected: Ném NoSuchElementException
-     */
     @Test
-    public void UT_EM_034_getQuestionTextByExamId_examNotFound_shouldThrowNoSuchElement() {
-        logger.info("[UT_EM_034] BẮT ĐẦU: getQuestionTextByExamId khi exam không tồn tại");
+    @DisplayName("UT_EM_057: Trường hợp có 1 choice list, 1 choice đúng, không phải lần đầu xem kết quả" +
+            "--> Trả về response chứa exam result, điểm bằng 10, " +
+            "cập nhật exam user")
+    public void getResultExamByUser_1ChoiceList_1ChoiceCorrect_notFirst() throws Exception {
+        //arrange
+        User user =  new User();
+        Long userId = 1L;
+        String username = "user01";
+        user.setId(userId);
+        user.setUsername(username);
+        when(userService.getUserByUsername(username)).thenReturn(Optional.of(user));
 
-        when(examService.getExamById(999L)).thenReturn(Optional.empty());
+        Long examId = 1L;
+        String questionData = generateExamQuestionPointString(1);
+        Exam exam = createExamWithTime(false, false, -600000L,
+                600000L, questionData, 60000);
+        exam.setId(examId);
+        when(examService.getExamById(exam.getId())).thenReturn(Optional.of(exam));
 
-        try {
-            examController.getQuestionTextByExamId(999L);
-            fail("Phải ném NoSuchElementException");
-        } catch (NoSuchElementException expected) {
-            assertNotNull(expected);
-        } catch (IOException ioException) {
-            fail("Không mong đợi IOException");
+        ExamUser examUser = createExamUser(exam, user, true, true, 0, questionData, 20.0);
+        when(examUserService.findByExamAndUser(examId, username)).thenReturn(examUser);
+
+        List<ChoiceList> lists = new  ArrayList<>();
+        ChoiceList choiceList = createChoiceList(1L, 10, true);
+        lists.add(choiceList);
+        when(examService.getChoiceList(anyList(), anyList())).thenReturn(lists);
+
+        //act
+        ResponseEntity response = examController.getResultExamByUser(userId, username);
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody() instanceof ExamResult);
+
+        ExamResult examResult = (ExamResult) response.getBody();
+        assertEquals(examUser.getTimeFinish(), examResult.getUserTimeFinish());
+        assertEquals(examUser.getTimeStart(), examResult.getUserTimeBegin());
+        assertEquals(exam.getDurationExam() * 60 - examUser.getRemainingTime(), examResult.getRemainingTime());
+        assertEquals(10, examResult.getTotalPoint());
+        assertSame(choiceList, examResult.getChoiceList().get(0));
+
+        verify(examService, times(1)).getExamById(examId);
+        verify(userService, times(1)).getUserByUsername(username);
+        verify(examUserService, times(1)).findByExamAndUser(examId, username);
+        verify(examService, times(1)).getChoiceList(anyList(), anyList());
+        verify(examUserService, times(1)).update(examUser);
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_058: Trường hợp có 5 choice list, 3 choice đúng, 2 choice sai" +
+            "--> Trả về response chứa exam result, điểm bằng tồng điểm 3 câu đúng, " +
+            "cập nhật exam user")
+    public void getResultExamByUser_5ChoiceList_3Correct_2Wrong() throws Exception {
+        //arrange
+        User user =  new User();
+        Long userId = 1L;
+        String username = "user01";
+        user.setId(userId);
+        user.setUsername(username);
+        when(userService.getUserByUsername(username)).thenReturn(Optional.of(user));
+
+        Long examId = 1L;
+        String questionData = generateExamQuestionPointString(1);
+        Exam exam = createExamWithTime(false, false, -600000L,
+                600000L, questionData, 60000);
+        exam.setId(examId);
+        when(examService.getExamById(exam.getId())).thenReturn(Optional.of(exam));
+
+        ExamUser examUser = createExamUser(exam, user, true, true, 0, questionData, -1.0);
+        when(examUserService.findByExamAndUser(examId, username)).thenReturn(examUser);
+
+        List<ChoiceList> lists = new  ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            lists.add(createChoiceList((long) i, 10, true));
         }
+        for (int i = 3; i < 5; i++) {
+            lists.add(createChoiceList((long) i, 10, false));
+        }
+
+        when(examService.getChoiceList(anyList(), anyList()))
+                .thenReturn(lists);
+
+        //act
+        ResponseEntity response = examController.getResultExamByUser(userId, username);
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody() instanceof ExamResult);
+
+        ExamResult examResult = (ExamResult) response.getBody();
+        assertEquals(examUser.getTimeFinish(), examResult.getUserTimeFinish());
+        assertEquals(examUser.getTimeStart(), examResult.getUserTimeBegin());
+        assertEquals(exam.getDurationExam() * 60 - examUser.getRemainingTime(), examResult.getRemainingTime());
+        assertEquals(30, examResult.getTotalPoint());
+        assertSame(lists, examResult.getChoiceList());
+
+        verify(examService, times(1)).getExamById(examId);
+        verify(userService, times(1)).getUserByUsername(username);
+        verify(examUserService, times(1)).findByExamAndUser(examId, username);
+        verify(examService, times(1)).getChoiceList(anyList(), anyList());
+        verify(examUserService, times(1)).update(examUser);
+
     }
 
-    /**
-     * UT_EM_035: Lấy lịch thi và map trạng thái hoàn thành
-     * Mô tả: Kiểm tra map trạng thái missed/not started/completed/doing
-     * Input: 4 examUsers tương ứng 4 trạng thái
-     * Expected: isCompleted lần lượt = -2, 0, -1, 1
-     */
     @Test
-    public void UT_EM_035_getExamCalendar_shouldMapExamStatuses() {
-        logger.info("[UT_EM_035] BẮT ĐẦU: getExamCalendar phải map đúng trạng thái bài thi");
+    @DisplayName("UT_EM_059: Trường hợp không tìm thấy exam" +
+            " --> Trả về EntityNotFoundException")
+    public void getResultExamByUser_notFoundExam() throws Exception {
+        //arrange
+        Long userId = 1L;
+        String username = "user01";
 
-        when(userService.getUserName()).thenReturn("student01");
+        Long examId = 999L;
+        String questionData = generateExamQuestionPointString(1);
+        Exam exam = createExamWithTime(false, false, -600000L,
+                600000L, questionData, 60000);
+        exam.setId(examId);
 
-        Exam missedExam = buildExamForCalendar(101L, new Date(System.currentTimeMillis() - 7200000),
-                new Date(System.currentTimeMillis() - 3600000));
-        Exam notYetExam = buildExamForCalendar(102L, new Date(System.currentTimeMillis() + 3600000),
-                new Date(System.currentTimeMillis() + 7200000));
-        Exam completedExam = buildExamForCalendar(103L, new Date(System.currentTimeMillis() - 3600000),
-                new Date(System.currentTimeMillis() + 3600000));
-        Exam doingExam = buildExamForCalendar(104L, new Date(System.currentTimeMillis() - 1800000),
-                new Date(System.currentTimeMillis() + 1800000));
+        //assert
+        assertThrows(EntityNotFoundException.class, () -> examController.getResultExamByUser(examId, username));
 
-        ExamUser euMissed = new ExamUser();
-        euMissed.setExam(missedExam);
-        euMissed.setIsStarted(false);
-        euMissed.setIsFinished(false);
-
-        ExamUser euNotYet = new ExamUser();
-        euNotYet.setExam(notYetExam);
-        euNotYet.setIsStarted(false);
-        euNotYet.setIsFinished(false);
-
-        ExamUser euCompleted = new ExamUser();
-        euCompleted.setExam(completedExam);
-        euCompleted.setIsStarted(true);
-        euCompleted.setIsFinished(true);
-
-        ExamUser euDoing = new ExamUser();
-        euDoing.setExam(doingExam);
-        euDoing.setIsStarted(true);
-        euDoing.setIsFinished(false);
-
-        when(examUserService.getExamListByUsername("student01"))
-                .thenReturn(Arrays.asList(euMissed, euNotYet, euCompleted, euDoing));
-
-        List<ExamCalendar> calendars = examController.getExamCalendar();
-
-        assertEquals(4, calendars.size());
-        assertEquals(-2, calendars.get(0).getIsCompleted());
-        assertEquals(0, calendars.get(1).getIsCompleted());
-        assertEquals(-1, calendars.get(2).getIsCompleted());
-        assertEquals(1, calendars.get(3).getIsCompleted());
+        verify(examService, times(1)).getExamById(examId);
     }
 
-    /**
-     * UT_EM_036: Tạo exam với questionData không hợp lệ phải rollback logic tạo dữ liệu phụ thuộc
-     * Mô tả: Nếu questionData parse lỗi thì API phải trả lỗi và không được lưu exam/exam-user.
-     * Input: questionData = "invalid-json"
-     * Expected: Response 500, không gọi saveExam() và không gọi create(examUser)
-     */
     @Test
-    public void UT_EM_036_createExam_invalidQuestionData_shouldNotPersistAndReturn500() throws Exception {
-        logger.info("[UT_EM_036] BẮT ĐẦU: createExam với questionData không hợp lệ");
+    @DisplayName("UT_EM_060: Trường hợp lấy thông tin user thất bại " +
+            "--> trả về EntityNotFoundException")
+    public void getResultExamByUser_getUserFail() throws Exception {
+        //arrange
+        User user =  new User();
+        Long userId = 1L;
+        String username = "user01";
+        user.setId(userId);
+        user.setUsername(username);
 
-        sampleExam.setQuestionData("invalid-json");
-        when(userService.getUserName()).thenReturn("lecturer01");
-        when(userService.getUserByUsername("lecturer01")).thenReturn(Optional.of(lecturerUser));
-        when(intakeService.findById(1L)).thenReturn(Optional.of(sampleIntake));
-        when(partService.findPartById(1L)).thenReturn(Optional.of(samplePart));
-        when(userService.findAllByIntakeId(1L)).thenReturn(Arrays.asList(studentUser));
+        Long examId = 1L;
+        String questionData = generateExamQuestionPointString(1);
+        Exam exam = createExamWithTime(false, false, -600000L,
+                600000L, questionData, 60000);
+        exam.setId(examId);
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
 
-        ResponseEntity<?> response = examController.createExam(sampleExam, 1L, 1L, false, false);
 
-        assertEquals("Status phải là 500 khi questionData lỗi", HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
-        verify(examService, never()).saveExam(any(Exam.class));
-        verify(examUserService, never()).create(any(Exam.class), anyList());
+        //assert
+        assertThrows(EntityNotFoundException.class, () -> examController.getResultExamByUser(userId, username));
+
+        verify(examService, times(1)).getExamById(examId);
+        verify(userService, times(1)).getUserByUsername(username);
     }
 
-    /**
-     * UT_EM_037: Lấy câu hỏi khi không tồn tại exam-user cho user hiện tại
-     * Mô tả: API cần xử lý an toàn khi user chưa được gán bài thi.
-     * Input: exam tồn tại, examUser = null
-     * Expected: Response 404, không ném NullPointerException
-     */
     @Test
-    public void UT_EM_037_getAllQuestions_missingExamUser_shouldReturn404() throws IOException {
-        logger.info("[UT_EM_037] BẮT ĐẦU: getAllQuestions khi không tồn tại exam-user");
+    @DisplayName("UT_EM_061: Trường hợp dữ liệu hợp lệ, chuyển đổi thành công " +
+            "--> Trả về List<AnswerSheet>")
+    public void convertAnswerJsonToObject_convertSuccess() throws Exception {
+        //arrange
+        ExamUser examUser = new ExamUser();
+        String answerSheetString = generateAnswerSheetString(2);
+        examUser.setAnswerSheet(answerSheetString);
 
-        sampleExam.setLocked(false);
-        when(userService.getUserName()).thenReturn("student01");
-        when(examService.getExamById(1L)).thenReturn(Optional.of(sampleExam));
-        when(examUserService.findByExamAndUser(1L, "student01")).thenReturn(null);
+        //act
+        List<AnswerSheet> result = examController.convertAnswerJsonToObject(examUser);
 
-        ResponseEntity<ExamQuestionList> response = examController.getAllQuestions(1L);
+        //assert
+        assertEquals(2, result.size());
 
-        assertEquals("Phải trả 404 khi thiếu exam-user", HttpStatus.NOT_FOUND, response.getStatusCode());
+        List<AnswerSheet> correct = generateAnswerSheet(2);
+        assertEquals(correct.get(0).getChoices(), result.get(0).getChoices());
+        assertEquals(correct.get(1).getChoices(), result.get(1).getChoices());
+
     }
 
-    /**
-     * UT_EM_038: Lưu đáp án khi isFinish=false không được set timeFinish
-     * Mô tả: Chỉ khi nộp bài (isFinish=true) mới có thời gian kết thúc.
-     * Input: isFinish=false
-     * Expected: timeFinish giữ nguyên null sau khi update
-     */
     @Test
-    public void UT_EM_038_saveUserExamAnswer_notFinished_shouldNotSetTimeFinish() throws JsonProcessingException {
-        logger.info("[UT_EM_038] BẮT ĐẦU: saveUserExamAnswer khi chưa nộp bài");
+    @DisplayName("UT_EM_062: Trường hợp dữ liệu rỗng " +
+            "--> Trả về List<AnswerSheet> rỗng")
+    public void convertAnswerJsonToObject_answerEmpty() throws Exception {
+        //arrange
+        ExamUser examUser = new ExamUser();
+        String answerSheetString = "";
+        examUser.setAnswerSheet(answerSheetString);
 
-        setAuthentication("student01");
-        sampleExamUser.setIsFinished(false);
-        sampleExamUser.setTimeFinish(null);
-        when(examUserService.findByExamAndUser(1L, "student01")).thenReturn(sampleExamUser);
+        //act
+        List<AnswerSheet> result = examController.convertAnswerJsonToObject(examUser);
 
-        List<AnswerSheet> answerSheets = Arrays.asList(new AnswerSheet(1L,
-                Arrays.asList(new Choice(1L, "int", 1)), 10));
+        //assert
+        assertEquals(0, result.size());
 
-        examController.saveUserExamAnswer(answerSheets, 1L, false, 1500);
-
-        assertNull("Chưa nộp bài thì timeFinish phải null", sampleExamUser.getTimeFinish());
-        assertFalse("isFinished phải là false", sampleExamUser.getIsFinished());
-        assertEquals(1500, sampleExamUser.getRemainingTime());
-        verify(examUserService, times(1)).update(sampleExamUser);
     }
 
-    private void setAuthentication(String username) {
-        SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(username, "password")
-        );
+    @Test
+    @DisplayName("UT_EM_063: Trường hợp dữ liệu là Null " +
+            "--> Trả về List<AnswerSheet> rỗng")
+    public void convertAnswerJsonToObject_answerNull() throws Exception {
+        //arrange
+        ExamUser examUser = new ExamUser();
+        String answerSheetString = null;
+        examUser.setAnswerSheet(answerSheetString);
+
+        //act
+        List<AnswerSheet> result = examController.convertAnswerJsonToObject(examUser);
+
+        //assert
+        assertEquals(0, result.size());
+
     }
 
-    private Exam buildExamForCalendar(Long id, Date begin, Date finish) {
+    @Test
+    @DisplayName("UT_EM_064: Trường hợp dữ liệu không hợp lệ " +
+            "--> Trả về InvalidPropertiesFormatException")
+    public void convertAnswerJsonToObject_invalidAnswerJson() throws Exception {
+        //arrange
+        ExamUser examUser = new ExamUser();
+        String answerSheetString = "[]][][]";
+        examUser.setAnswerSheet(answerSheetString);
+
+        //assert
+        assertThrows(InvalidPropertiesFormatException.class,
+                () -> examController.convertAnswerJsonToObject(examUser));
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_065: Trường hợp lấy được dữ liệu câu hỏi của exam thành công," +
+            " exam có 1 question" +
+            " --> Trả về List ExamDetail có 1 câu hỏi")
+    public void getQuestionTextByExamId_getExamDetailSuccess() throws Exception {
+        //arrange
+        Long examId = 1L;
+        Exam exam = new  Exam();
+        String questionData = generateExamQuestionPointString(1);
+        exam.setId(examId);
+        exam.setQuestionData(questionData);
+
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
+
+        long questionId = 1L;
+        String questionText = "question 1";
+        int point = 10;
+        DifficultyLevel level = DifficultyLevel.MEDIUM;
+        QuestionType type = new QuestionType();
+        type.setDescription("MC");
+
+        Question question = createQuestion(questionId, questionText, point, level, type);
+
+        ExamDetail examDetail = new ExamDetail();
+        examDetail.setQuestionText(questionText);
+        examDetail.setPoint(point);
+        examDetail.setQuestionType("MC");
+        examDetail.setDifficultyLevel("MEDIUM");
+
+        when(questionService.getQuestionById(questionId)).thenReturn(Optional.of(question));
+
+        //act
+        List<ExamDetail> result = examController.getQuestionTextByExamId(examId);
+
+        //assert
+        assertEquals(1, result.size());
+        assertEquals(examDetail, result.get(0));
+        verify(examService, times(1)).getExamById(examId);
+        verify(questionService, times(1)).getQuestionById(questionId);
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_066: Trường hợp lấy được dữ liệu câu hỏi của exam thành công," +
+            " exam có 5 question" +
+            " --> Trả về List ExamDetail có 5 câu hỏi")
+    public void getQuestionTextByExamId_getExamDetailSuccess_5Question() throws Exception {
+        //arrange
+        Long examId = 1L;
+        Exam exam = new  Exam();
+        String questionData = generateExamQuestionPointString(5);
+        exam.setId(examId);
+        exam.setQuestionData(questionData);
+
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
+
+        List<Question> questions = new ArrayList<>();
+        List<ExamDetail> examDetails = new ArrayList<>();
+
+        for (int i = 0; i < 5; ++i) {
+            Long id = (long) i + 1;
+            String questionText = "question " + (i + 1);
+            int point = 10;
+            DifficultyLevel level = DifficultyLevel.EASY;
+            QuestionType type = new QuestionType();
+            type.setDescription("MC");
+            questions.add(createQuestion(id, questionText, point, level, type));
+            when(questionService.getQuestionById(id)).thenReturn(Optional.of(questions.get(i)));
+
+            ExamDetail examDetail = new ExamDetail();
+            examDetail.setQuestionText(questionText);
+            examDetail.setPoint(point);
+            examDetail.setQuestionType("MC");
+            examDetail.setDifficultyLevel("EASY");
+            examDetails.add(examDetail);
+        }
+
+
+        //act
+        List<ExamDetail> result = examController.getQuestionTextByExamId(examId);
+
+        //assert
+        assertEquals(5, result.size());
+        assertEquals(examDetails.get(0), result.get(0));
+        assertEquals(examDetails.get(4), result.get(4));
+
+        verify(examService, times(1)).getExamById(examId);
+        verify(questionService, times(5)).getQuestionById(anyLong());
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_067: Trường hợp lấy được dữ liệu câu hỏi thất bại," +
+            " --> Trả về EntityNotExistsException")
+    public void getQuestionTextByExamId_getQuestionFail() throws Exception {
+        //arrange
+        Long examId = 1L;
+        Exam exam = new  Exam();
+        String questionData = generateExamQuestionPointString(1);
+        exam.setId(examId);
+        exam.setQuestionData(questionData);
+
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
+
+        //assert
+        assertThrows(EntityNotExistsException.class, () -> examController.getQuestionTextByExamId(examId));
+        verify(examService, times(1)).getExamById(examId);
+        verify(questionService, times(1)).getQuestionById(anyLong());
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_068: Trường hợp không tìm thấy exam," +
+            " --> Trả về EntityNotExistsException")
+    public void getQuestionTextByExamId_getExamFail() throws Exception {
+        //arrange
+        Long examId = 999L;
+
+        //assert
+        assertThrows(EntityNotExistsException.class, () -> examController.getQuestionTextByExamId(examId));
+        verify(examService, times(1)).getExamById(examId);
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_069: Trường hợp chuyển đổi question thành công, exam có 1 question " +
+            "--> Trả về List ExamQuestionPoint có 1 question")
+    public void convertQuestionJsonToObject_convertSuccess() throws Exception {
+        //arrange
+        Exam exam = new Exam();
+        String questionData = generateExamQuestionPointString(1);
+        exam.setQuestionData(questionData);
+
+        ExamQuestionPoint question = new ExamQuestionPoint();
+        question.setQuestionId(1L);
+        question.setPoint(10);
+
+        //act
+        List<ExamQuestionPoint> examQuestionPoints = examController.convertQuestionJsonToObject(Optional.of(exam));
+
+        //assert
+        assertEquals(1, examQuestionPoints.size());
+        assertEquals(question, examQuestionPoints.get(0));
+    }
+
+    @Test
+    @DisplayName("UT_EM_070: Trường hợp chuyển đổi question thất bại, lỗi định dạng " +
+            "--> Trả về InvalidPropertiesFormatException")
+    public void convertQuestionJsonToObject_invalidFormatQuestionString() throws Exception {
+        //arrange
+        Exam exam = new Exam();
+        String questionData = "[][[[]";
+        exam.setQuestionData(questionData);
+
+        //assert
+        assertThrows(InvalidPropertiesFormatException.class,
+                () -> examController.convertQuestionJsonToObject(Optional.of(exam)));
+    }
+
+    @Test
+    @DisplayName("UT_EM_071: Trường hợp optional<exam> truyền vào rỗng" +
+            "--> Trả về IllegalArgumentException")
+    public void convertQuestionJsonToObject_optionalEmpty() throws Exception {
+
+        //assert
+        assertThrows(IllegalArgumentException.class,
+                () -> examController.convertQuestionJsonToObject(Optional.empty()));
+    }
+
+    @Test
+    @DisplayName("UT_EM_072: Trường hợp chuyển đổi question thành công, exam có 5 question " +
+            "--> Trả về List ExamQuestionPoint có 5 question")
+    public void convertQuestionJsonToObject_convertSuccess_5Question() throws Exception {
+        //arrange
+        Exam exam = new Exam();
+        String questionData = generateExamQuestionPointString(5);
+        exam.setQuestionData(questionData);
+
+        ExamQuestionPoint question1 = new ExamQuestionPoint();
+        question1.setQuestionId(1L);
+        question1.setPoint(10);
+
+        List<ExamQuestionPoint> questions = new ArrayList<>();
+        for (long i = 1; i <= 5; i++) {
+            ExamQuestionPoint question = new ExamQuestionPoint();
+            question.setQuestionId(i);
+            question.setPoint(10);
+            questions.add(question);
+        }
+
+        //act
+        List<ExamQuestionPoint> examQuestionPoints = examController.convertQuestionJsonToObject(Optional.of(exam));
+
+        //assert
+        assertEquals(5, examQuestionPoints.size());
+        assertEquals(questions.get(0), examQuestionPoints.get(0));
+        assertEquals(questions.get(4), examQuestionPoints.get(4));
+    }
+
+    @Test
+    @DisplayName("UT_EM_073: Trường hợp user có 1 userexam không làm " +
+            "--> Trả về List<ExamCalendar> có 1 examCalendar trạng thái Missed")
+    public void getExamCalender_1ExamUserMissed() {
+        //arrange
+        String username = "user01";
+        when(userService.getUserName()).thenReturn(username);
+
+        Long examId = 1L;
+        String title = "Exam " + examId;
+        Part part = createPartWithCourse("Course", "001", "Part 1");
+        Exam exam = createExamForCalendar(examId, part, title,
+                -600000L, -500000L, 60000);
+        ExamUser examUser = createExamUserForCalendar(exam, false, false);
+
+        when(examUserService.getExamListByUsername(username)).thenReturn(Arrays.asList(examUser));
+
+        //act
+        List<ExamCalendar> examCalendars = examController.getExamCalendar();
+
+        //assert
+        assertEquals(1, examCalendars.size());
+        ExamCalendar examCalendar = examCalendars.get(0);
+        assertEquals("Missed", examCalendar.getCompleteString());
+        assertEquals(-2, examCalendar.getIsCompleted());
+
+        verify(userService, times(1)).getUserName();
+        verify(examUserService, times(1)).getExamListByUsername(username);
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_074: Trường hợp user có 1 exam user chưa đến giờ làm" +
+            "--> Trả về List<ExamCalendar> có 1 examCalendar trạng thái Not yet started")
+    public void getExamCalender_1ExamUserNotYetStarted() {
+        //arrange
+        String username = "user01";
+        when(userService.getUserName()).thenReturn(username);
+
+        Long examId = 1L;
+        String title = "Exam " + examId;
+        Part part = createPartWithCourse("Course", "001", "Part 1");
+        Exam exam = createExamForCalendar(examId, part, title,
+                600000L, 650000L, 60000);
+        ExamUser examUser = createExamUserForCalendar(exam, false, false);
+
+        when(examUserService.getExamListByUsername(username)).thenReturn(Arrays.asList(examUser));
+
+        //act
+        List<ExamCalendar> examCalendars = examController.getExamCalendar();
+
+        //assert
+        assertEquals(1, examCalendars.size());
+        ExamCalendar examCalendar = examCalendars.get(0);
+        assertEquals("Not yet started", examCalendar.getCompleteString());
+        assertEquals(0, examCalendar.getIsCompleted());
+
+        verify(userService, times(1)).getUserName();
+        verify(examUserService, times(1)).getExamListByUsername(username);
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_075: Trường hợp user có 1 exam user đã nộp bài rồi" +
+            "--> Trả về List<ExamCalendar> có 1 examCalendar trạng thái Completed")
+    public void getExamCalender_1ExamUserCompleted() {
+        //arrange
+        String username = "user01";
+        when(userService.getUserName()).thenReturn(username);
+
+        Long examId = 1L;
+        String title = "Exam " + examId;
+        Part part = createPartWithCourse("Course", "001", "Part 1");
+        Exam exam = createExamForCalendar(examId, part, title,
+                600000L, 650000L, 60000);
+        ExamUser examUser = createExamUserForCalendar(exam, true, true);
+
+        when(examUserService.getExamListByUsername(username)).thenReturn(Arrays.asList(examUser));
+
+        //act
+        List<ExamCalendar> examCalendars = examController.getExamCalendar();
+
+        //assert
+        assertEquals(1, examCalendars.size());
+        ExamCalendar examCalendar = examCalendars.get(0);
+        assertEquals("Completed", examCalendar.getCompleteString());
+        assertEquals(-1, examCalendar.getIsCompleted());
+
+        verify(userService, times(1)).getUserName();
+        verify(examUserService, times(1)).getExamListByUsername(username);
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_076: Trường hợp user có 1 exam user trong thời gian làm bài" +
+            "--> Trả về List<ExamCalendar> có 1 examCalendar trạng thái Doing")
+    public void getExamCalender_1ExamUserDoing() {
+        //arrange
+        String username = "user01";
+        when(userService.getUserName()).thenReturn(username);
+
+        Long examId = 1L;
+        String title = "Exam " + examId;
+        Part part = createPartWithCourse("Course", "001", "Part 1");
+        Exam exam = createExamForCalendar(examId, part, title,
+                -600000L, 650000L, 60000);
+        ExamUser examUser = createExamUserForCalendar(exam, false, false);
+
+        when(examUserService.getExamListByUsername(username)).thenReturn(Arrays.asList(examUser));
+
+        //act
+        List<ExamCalendar> examCalendars = examController.getExamCalendar();
+
+        //assert
+        assertEquals(1, examCalendars.size());
+        ExamCalendar examCalendar = examCalendars.get(0);
+        assertEquals("Doing", examCalendar.getCompleteString());
+        assertEquals(1, examCalendar.getIsCompleted());
+
+        verify(userService, times(1)).getUserName();
+        verify(examUserService, times(1)).getExamListByUsername(username);
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_077: Trường hợp user có 5 userexam trong thời gian làm bài" +
+            "--> Trả về List<ExamCalendar> có 5 examCalendar trạng thái Doing")
+    public void getExamCalender_5ExamUserMissed() {
+        //arrange
+        String username = "user01";
+        when(userService.getUserName()).thenReturn(username);
+
+        List<ExamUser> examUsers = new ArrayList<>();
+
+        for (long i = 1; i <= 5; ++i) {
+            String title = "Exam " + i;
+            Part part = createPartWithCourse("Course" + i, "Course" + i, "Part" + i);
+            Exam exam = createExamForCalendar(i, part, title,
+                    -600000L, -60000L, 60000);
+            ExamUser examUser = createExamUserForCalendar(exam, false, false);
+            examUsers.add(examUser);
+        }
+
+        when(examUserService.getExamListByUsername(username)).thenReturn(examUsers);
+
+        //act
+        List<ExamCalendar> examCalendars = examController.getExamCalendar();
+
+        //assert
+        assertEquals(5, examCalendars.size());
+        ExamCalendar examCalendar1 = examCalendars.get(0);
+        assertEquals("Missed", examCalendar1.getCompleteString());
+        assertEquals(-2, examCalendar1.getIsCompleted());
+        ExamCalendar examCalendar5 = examCalendars.get(4);
+        assertEquals("Missed", examCalendar5.getCompleteString());
+        assertEquals(-2, examCalendar5.getIsCompleted());
+
+        verify(userService, times(1)).getUserName();
+        verify(examUserService, times(1)).getExamListByUsername(username);
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_078: Trường hợp không tìm thấy exam user" +
+            "--> Trả về EntityNotExistsException")
+    public void getExamCalender_notFoundExamUser() {
+        //arrange
+        String username = "user01";
+        when(userService.getUserName()).thenReturn(username);
+
+        //assert
+        assertThrows(EntityNotExistsException.class, () -> examController.getExamCalendar());
+
+        verify(userService, times(1)).getUserName();
+        verify(examUserService, times(1)).getExamListByUsername(username);
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_079: Trường hợp lấy username thất bại" +
+            "--> Trả về RuntimeException")
+    public void getExamCalender_getUsernameFail() {
+
+        //assert
+        assertThrows(RuntimeException.class, () -> examController.getExamCalendar());
+
+        verify(userService, times(1)).getUserName();
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_080: Trường hợp cancel thành công " +
+            "--> không ném ra Exception")
+    public void cancelExam_cancelSuccess() {
+        //arrange
+        String username = "user01";
+        when(userService.getUserName()).thenReturn(username);
+
+        User user = new User();
+        when(userService.getUserByUsername(username)).thenReturn(Optional.of(user));
+
+        Exam exam = new  Exam();
+        exam.setId(1L);
+        exam.setBeginExam( new Date(System.currentTimeMillis() + 60000));
+        when(examService.getExamById(1L)).thenReturn(Optional.of(exam));
+
+        //assert
+        assertDoesNotThrow(() -> examController.cancelExam(1L));
+
+        verify(userService, times(1)).getUserName();
+        verify(userService, times(1)).getUserByUsername(username);
+        verify(examService, times(1)).getExamById(1L);
+        verify(examService, times(1)).cancelExam(1L);
+    }
+
+    @Test
+    @DisplayName("UT_EM_081: Trường hợp bài thi đã bắt đầu" +
+            "--> Trả về IllegalStateException")
+    public void cancelExam_beginExamSmallerThanNow() {
+        //arrange
+        String username = "user01";
+        when(userService.getUserName()).thenReturn(username);
+
+        User user = new User();
+        when(userService.getUserByUsername(username)).thenReturn(Optional.of(user));
+
+        Exam exam = new  Exam();
+        exam.setId(1L);
+        exam.setBeginExam( new Date(System.currentTimeMillis() - 60000));
+        when(examService.getExamById(1L)).thenReturn(Optional.of(exam));
+
+        //assert
+        assertThrows(IllegalStateException.class ,() -> examController.cancelExam(1L));
+
+        verify(userService, times(1)).getUserName();
+        verify(userService, times(1)).getUserByUsername(username);
+        verify(examService, times(1)).getExamById(1L);
+    }
+
+    @Test
+    @DisplayName("UT_EM_082: Trường hợp không tìm thấy exam" +
+            "--> Trả về EntityNotExistsException")
+    public void cancelExam_notFoundExam() {
+        //arrange
+        String username = "user01";
+        when(userService.getUserName()).thenReturn(username);
+
+        User user = new User();
+        when(userService.getUserByUsername(username)).thenReturn(Optional.of(user));
+
+        //assert
+        assertThrows(EntityNotExistsException.class ,() -> examController.cancelExam(1L));
+
+        verify(userService, times(1)).getUserName();
+        verify(userService, times(1)).getUserByUsername(username);
+        verify(examService, times(1)).getExamById(999L);
+    }
+
+    @Test
+    @DisplayName("UT_EM_083: Trường hợp tìm user thất bại" +
+            "--> Trả về EntityNotExistsException")
+    public void cancelExam_notFoundUser() {
+        //arrange
+        String username = "user01";
+        when(userService.getUserName()).thenReturn(username);
+
+        //assert
+        assertThrows(EntityNotExistsException.class ,() -> examController.cancelExam(1L));
+
+        verify(userService, times(1)).getUserName();
+        verify(userService, times(1)).getUserByUsername(username);
+    }
+
+    @Test
+    @DisplayName("UT_EM_084: Trường hợp lấy username thất bại" +
+            "--> Trả về RuntimeException")
+    public void cancelExam_getUsernameFail() {
+        //assert
+        assertThrows(RuntimeException.class ,() -> examController.cancelExam(1L));
+
+        verify(userService, times(1)).getUserName();
+    }
+
+    @Test
+    @DisplayName("UT_EM_085: Trường hợp lấy kết quả bài thi thành công," +
+            " bài thi có 1 câu hỏi, 1 câu trả lời đúng," +
+            " lần đầu lấy ra kết quả" +
+            "--> Trả về response chứa kết quả bài thi, điểm bằng điểm câu hỏi trả lời đúng, " +
+            "cập nhật kết quả bài thi")
+    public void getResultExam_1ChoiceList_1Correct() throws Exception {
+        //arrange
+        String username = "user01";
+        when(userService.getUserName()).thenReturn(username);
+
+        Exam exam = new Exam();
+        Long examId = 1L;
+        String questionData = generateExamQuestionPointString(1);
+        exam.setId(examId);
+        exam.setQuestionData(questionData);
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
+
+        ExamUser examUser = new  ExamUser();
+        String answerSheet = generateAnswerSheetString(1);
+        examUser.setExam(exam);
+        examUser.setAnswerSheet(answerSheet);
+        examUser.setTotalPoint(-1.0);
+        when(examUserService.findByExamAndUser(examId, username)).thenReturn(examUser);
+
+        ChoiceList choiceList = createChoiceList(1L, 10, true);
+        when(examService.getChoiceList(anyList(), anyList())).thenReturn(Arrays.asList(choiceList));
+
+        //act
+        ResponseEntity response = examController.getResultExam(examId);
+        ExamResult examResult = (ExamResult) response.getBody();
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(1, examResult.getChoiceList().size());
+        assertEquals(10, examResult.getTotalPoint());
+
+        verify(userService, times(1)).getUserName();
+        verify(examService, times(1)).getExamById(examId);
+        verify(examUserService, times(1)).findByExamAndUser(examId, username);
+        verify(examService, times(1)).getChoiceList(anyList(), anyList());
+        verify(examUserService, times(1)).update(examUser);
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_086: Trường hợp lấy kết quả bài thi thành công," +
+            " bài thi có 1 câu hỏi, 1 câu trả lời đúng," +
+            " không phải lần đầu lấy ra kết quả" +
+            "--> Trả về response chứa kết quả bài thi, điểm bằng điểm câu hỏi trả lời đúng," +
+            " cập nhật kết quả bài thi")
+    public void getResultExam_1ChoiceList_1Correct_notFirst() throws Exception {
+        //arrange
+        String username = "user01";
+        when(userService.getUserName()).thenReturn(username);
+
+        Exam exam = new Exam();
+        Long examId = 1L;
+        String questionData = generateExamQuestionPointString(1);
+        exam.setId(examId);
+        exam.setQuestionData(questionData);
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
+
+        ExamUser examUser = new  ExamUser();
+        String answerSheet = generateAnswerSheetString(1);
+        examUser.setExam(exam);
+        examUser.setAnswerSheet(answerSheet);
+        examUser.setTotalPoint(1.0);
+        when(examUserService.findByExamAndUser(examId, username)).thenReturn(examUser);
+
+        ChoiceList choiceList = createChoiceList(1L, 10, true);
+        when(examService.getChoiceList(anyList(), anyList())).thenReturn(Arrays.asList(choiceList));
+
+        //act
+        ResponseEntity response = examController.getResultExam(examId);
+        ExamResult examResult = (ExamResult) response.getBody();
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(1, examResult.getChoiceList().size());
+        assertEquals(10, examResult.getTotalPoint());
+
+        verify(userService, times(1)).getUserName();
+        verify(examService, times(1)).getExamById(examId);
+        verify(examUserService, times(1)).findByExamAndUser(examId, username);
+        verify(examService, times(1)).getChoiceList(anyList(), anyList());
+        verify(examUserService, times(1)).update(examUser);
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_087: Trường hợp lấy kết quả bài thi thành công," +
+            " bài thi có 1 câu hỏi, 1 câu trả lời sai," +
+            " lần đầu lấy ra kết quả" +
+            "--> Trả về response chứa kết quả bài thi, điểm bằng 0," +
+            " cập nhật kết quả bài thi")
+    public void getResultExam_1ChoiceList_1Wrong() throws Exception {
+        //arrange
+        String username = "user01";
+        when(userService.getUserName()).thenReturn(username);
+
+        Exam exam = new Exam();
+        Long examId = 1L;
+        String questionData = generateExamQuestionPointString(1);
+        exam.setId(examId);
+        exam.setQuestionData(questionData);
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
+
+        ExamUser examUser = new  ExamUser();
+        String answerSheet = generateAnswerSheetString(1);
+        examUser.setExam(exam);
+        examUser.setAnswerSheet(answerSheet);
+        examUser.setTotalPoint(-1.0);
+        when(examUserService.findByExamAndUser(examId, username)).thenReturn(examUser);
+
+        ChoiceList choiceList = createChoiceList(1L, 10, false);
+        when(examService.getChoiceList(anyList(), anyList())).thenReturn(Arrays.asList(choiceList));
+
+        //act
+        ResponseEntity response = examController.getResultExam(examId);
+        ExamResult examResult = (ExamResult) response.getBody();
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(1, examResult.getChoiceList().size());
+        assertEquals(0, examResult.getTotalPoint());
+
+        verify(userService, times(1)).getUserName();
+        verify(examService, times(1)).getExamById(examId);
+        verify(examUserService, times(1)).findByExamAndUser(examId, username);
+        verify(examService, times(1)).getChoiceList(anyList(), anyList());
+        verify(examUserService, times(1)).update(examUser);
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_088: Trường hợp lấy kết quả bài thi thành công," +
+            " bài thi có 1 câu hỏi, 1 câu trả lời sai," +
+            " không phải lần đầu lấy ra kết quả" +
+            "--> Trả về response chứa kết quả bài thi, điểm bằng 0," +
+            " cập nhật kết quả bài thi")
+    public void getResultExam_1ChoiceList_1Wrong_notFirst() throws Exception {
+        //arrange
+        String username = "user01";
+        when(userService.getUserName()).thenReturn(username);
+
+        Exam exam = new Exam();
+        Long examId = 1L;
+        String questionData = generateExamQuestionPointString(1);
+        exam.setId(examId);
+        exam.setQuestionData(questionData);
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
+
+        ExamUser examUser = new  ExamUser();
+        String answerSheet = generateAnswerSheetString(1);
+        examUser.setExam(exam);
+        examUser.setAnswerSheet(answerSheet);
+        examUser.setTotalPoint(1.0);
+        when(examUserService.findByExamAndUser(examId, username)).thenReturn(examUser);
+
+        ChoiceList choiceList = createChoiceList(1L, 10, false);
+        when(examService.getChoiceList(anyList(), anyList())).thenReturn(Arrays.asList(choiceList));
+
+        //act
+        ResponseEntity response = examController.getResultExam(examId);
+        ExamResult examResult = (ExamResult) response.getBody();
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(1, examResult.getChoiceList().size());
+        assertEquals(0, examResult.getTotalPoint());
+
+        verify(userService, times(1)).getUserName();
+        verify(examService, times(1)).getExamById(examId);
+        verify(examUserService, times(1)).findByExamAndUser(examId, username);
+        verify(examService, times(1)).getChoiceList(anyList(), anyList());
+        verify(examUserService, times(1)).update(examUser);
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_089: Trường hợp lấy kết quả bài thi thành công," +
+            " bài thi có 1 câu hỏi, không có câu trả lời nào" +
+            " lần đầu lấy ra kết quả" +
+            "--> Trả về response chứa kết quả bài thi, điểm bằng 0" +
+            "cập nhật kết quả bài thi")
+    public void getResultExam_1ChoiceList_0Answer() throws Exception {
+        //arrange
+        String username = "user01";
+        when(userService.getUserName()).thenReturn(username);
+
+        Exam exam = new Exam();
+        Long examId = 1L;
+        String questionData = generateExamQuestionPointString(1);
+        exam.setId(examId);
+        exam.setQuestionData(questionData);
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
+
+        ExamUser examUser = new  ExamUser();
+        String answerSheet = generateAnswerSheetString(0);
+        examUser.setExam(exam);
+        examUser.setAnswerSheet(answerSheet);
+        examUser.setTotalPoint(-1.0);
+        when(examUserService.findByExamAndUser(examId, username)).thenReturn(examUser);
+
+        List<ChoiceList> choiceLists = new ArrayList<>();
+
+        when(examService.getChoiceList(anyList(), anyList())).thenReturn(choiceLists);
+
+        //act
+        ResponseEntity response = examController.getResultExam(examId);
+        ExamResult examResult = (ExamResult) response.getBody();
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(0, examResult.getChoiceList().size());
+        assertEquals(0, examResult.getTotalPoint());
+
+        verify(userService, times(1)).getUserName();
+        verify(examService, times(1)).getExamById(examId);
+        verify(examUserService, times(1)).findByExamAndUser(examId, username);
+        verify(examService, times(1)).getChoiceList(anyList(), anyList());
+        verify(examUserService, times(1)).update(examUser);
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_090: Trường hợp lấy kết quả bài thi thành công," +
+            " bài thi có 5 câu hỏi, 3 câu trả lời đúng, 2 câu sai" +
+            " lần đầu lấy ra kết quả" +
+            "--> Trả về response chứa kết quả bài thi, điểm bằng điểm 3 câu hỏi trả lời đúng, " +
+            "cập nhật kết quả bài thi")
+    public void getResultExam_5ChoiceList_3Correct_2Wrong() throws Exception {
+        //arrange
+        String username = "user01";
+        when(userService.getUserName()).thenReturn(username);
+
+        Exam exam = new Exam();
+        Long examId = 1L;
+        String questionData = generateExamQuestionPointString(5);
+        exam.setId(examId);
+        exam.setQuestionData(questionData);
+        when(examService.getExamById(examId)).thenReturn(Optional.of(exam));
+
+        ExamUser examUser = new  ExamUser();
+        String answerSheet = generateAnswerSheetString(1);
+        examUser.setExam(exam);
+        examUser.setAnswerSheet(answerSheet);
+        examUser.setTotalPoint(-1.0);
+        when(examUserService.findByExamAndUser(examId, username)).thenReturn(examUser);
+
+        List<ChoiceList> choiceLists = new ArrayList<>();
+        for (long i = 1; i <= 3; ++i) {
+            ChoiceList choiceList = createChoiceList(i, 10, true);
+            choiceLists.add(choiceList);
+        }
+
+        for (long i = 4; i <= 5; ++i) {
+            ChoiceList choiceList = createChoiceList(i, 10, false);
+            choiceLists.add(choiceList);
+        }
+
+
+        when(examService.getChoiceList(anyList(), anyList())).thenReturn(choiceLists);
+
+        //act
+        ResponseEntity response = examController.getResultExam(examId);
+        ExamResult examResult = (ExamResult) response.getBody();
+
+        //assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(5, examResult.getChoiceList().size());
+        assertEquals(30, examResult.getTotalPoint());
+
+        verify(userService, times(1)).getUserName();
+        verify(examService, times(1)).getExamById(examId);
+        verify(examUserService, times(1)).findByExamAndUser(examId, username);
+        verify(examService, times(1)).getChoiceList(anyList(), anyList());
+        verify(examUserService, times(1)).update(examUser);
+
+    }
+
+    @Test
+    @DisplayName("UT_EM_091: Trường hợp không tìm thấy exam," +
+            "--> Trả về EntityNotExistsExeption ")
+    public void getResultExam_notFoundExam() throws Exception {
+        //arrange
+        String username = "user01";
+        when(userService.getUserName()).thenReturn(username);
+
+        //assert
+        assertThrows(EntityNotExistsException.class,  () -> examController.getResultExam(999L));
+
+        verify(userService, times(1)).getUserName();
+        verify(examService, times(1)).getExamById(999L);
+
+    }
+
+    private User userWithRoles(ERole... roleNames) {
+        User user = new User();
+        Set<Role> roles = new HashSet<Role>();
+        for (ERole roleName : roleNames) {
+            Role role = new Role();
+            role.setName(roleName);
+            roles.add(role);
+        }
+        user.setRoles(roles);
+        return user;
+    }
+
+    private Exam createExamForCalendar(Long id, Part part, String title, long beginOffsetMs,
+                                       long finishOffsetMs, int durationMinutes) {
         Exam exam = new Exam();
         exam.setId(id);
-        exam.setTitle("Exam-" + id);
-        exam.setDurationExam(60);
-        exam.setBeginExam(begin);
-        exam.setFinishExam(finish);
-        exam.setPart(samplePart);
+        exam.setPart(part);
+        exam.setTitle(title);
+        exam.setBeginExam(new Date(System.currentTimeMillis() + beginOffsetMs));
+        exam.setFinishExam(new Date(System.currentTimeMillis() + finishOffsetMs));
+        exam.setDurationExam(durationMinutes);
+
         return exam;
+    }
+
+    private Exam createExamWithTime(boolean locked, boolean shuffle, long beginOffsetMs, long finishOffsetMs,
+                                    String questionData, int durationMinutes) {
+        Exam exam = new Exam();
+        exam.setLocked(locked);
+        exam.setShuffle(shuffle);
+        exam.setBeginExam(new Date(System.currentTimeMillis() + beginOffsetMs));
+        exam.setFinishExam(new Date(System.currentTimeMillis() + finishOffsetMs));
+        exam.setDurationExam(durationMinutes);
+        exam.setQuestionData(questionData);
+        exam.setTitle("Mock Exam");
+        return exam;
+    }
+
+    private ExamUser createExamUser(Exam exam, User user, boolean started, boolean finished,
+                                    int remainingTime, String answerSheet, Double totalPoint) {
+        ExamUser examUser = new ExamUser();
+        examUser.setExam(exam);
+        examUser.setUser(user);
+        examUser.setIsStarted(started);
+        examUser.setIsFinished(finished);
+        examUser.setRemainingTime(remainingTime);
+        examUser.setAnswerSheet(answerSheet);
+        examUser.setTotalPoint(totalPoint);
+        return examUser;
+    }
+
+    private ExamUser createExamUserForCalendar(Exam exam, boolean started, boolean finished) {
+        ExamUser examUser = new ExamUser();
+        examUser.setExam(exam);
+        examUser.setIsStarted(started);
+        examUser.setIsFinished(finished);
+        return examUser;
+    }
+
+    private List<AnswerSheet> generateAnswerSheet(int count) throws Exception {
+        List<AnswerSheet> list = new ArrayList<>();
+        for (long i = 1; i <= count; i++) {
+            Choice c = new Choice();
+            c.setId(i);
+            c.setChoiceText("Choice " + i);
+            list.add(new AnswerSheet(i, Collections.singletonList(c), 10));
+        }
+        return list;
+    }
+
+    private String generateAnswerSheetString(int count) throws Exception {
+        List<AnswerSheet> list = new ArrayList<>();
+        for (long i = 1; i <= count; i++) {
+            Choice c = new Choice();
+            c.setId(i);
+            c.setChoiceText("Choice " + i);
+            list.add(new AnswerSheet(i, Collections.singletonList(c), 10));
+        }
+        return mapper.writeValueAsString(list);
+    }
+
+    private String generateExamQuestionPointString(int count) throws Exception {
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (long i = 1; i <= count; i++) {
+            Map<String, Object> item = new HashMap<>();
+            item.put("questionId", i);
+            item.put("point", 10);
+            list.add(item);
+        }
+        return mapper.writeValueAsString(list);
+    }
+
+    private ChoiceList createChoiceList(Long questionId, int point, boolean isCorrect) {
+        ChoiceList choiceList = new ChoiceList();
+
+        Question question = new Question();
+        question.setId(questionId);
+        question.setQuestionText("Câu hỏi số " + questionId);
+
+        choiceList.setQuestion(question);
+        choiceList.setPoint(point);
+        choiceList.setIsSelectedCorrected(isCorrect);
+
+        choiceList.setChoices(new ArrayList<>());
+
+        return choiceList;
+    }
+
+    private Question createQuestion(Long id, String questionText, int point,
+                                    DifficultyLevel difficultyLevel, QuestionType questionType) {
+        Question question = new Question();
+        question.setId(id);
+        question.setQuestionText(questionText);
+        question.setPoint(point);
+        question.setDifficultyLevel(difficultyLevel);
+        question.setQuestionType(questionType);
+
+        return question;
+    }
+
+    private Part createPartWithCourse(String courseName, String courseCode, String partName) {
+        Course course = new Course();
+        course.setName(courseName);
+        course.setCourseCode(courseCode);
+        Part part = new Part();
+        part.setName(partName);
+        part.setCourse(course);
+
+        return part;
     }
 }
 
