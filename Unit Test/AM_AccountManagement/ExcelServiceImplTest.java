@@ -357,6 +357,26 @@ class ExcelServiceImplTest {
         log.info("[UT_AM_088] existingUser={}, newUser={}", existingUser.getUsername(), newUser.getUsername());
     }
 
+    // Test Case ID: UT_AM_089
+    // Kiểm tra nhánh catch IOException khi không thể tạo file output
+    @Test
+    void testWriteUserToExcelFile_catchesIOException_whenOutputIsDirectory() throws IOException {
+        // Tạo một thư mục tên "users.xlsx" → FileOutputStream sẽ ném IOException
+        Path dir = Paths.get("users.xlsx");
+        Files.createDirectories(dir);
+
+        try {
+            ArrayList<UserExport> exports = new ArrayList<>();
+            exports.add(new UserExport("alice", "alice@example.com", "Alice", "Nguyen"));
+
+            // Không ném ra ngoài vì catch nuốt exception
+            assertDoesNotThrow(() -> excelService.writeUserToExcelFile(exports));
+        } finally {
+            // Cleanup: xóa thư mục sau test
+            Files.deleteIfExists(dir);
+        }
+    }
+
     private void writeWorkbook(Path file, WorkbookWriter writer) throws IOException {
         try (Workbook workbook = new XSSFWorkbook()) {
             writer.accept(workbook);
