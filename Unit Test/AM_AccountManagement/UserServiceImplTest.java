@@ -73,6 +73,127 @@ class UserServiceImplTest {
     }
 
     // Test Case ID: UT_AM_036
+    // Kiểm tra lấy ra user với username thành công
+    @Test
+    void testGetUserByUsername_Success() {
+        User user = new User();
+        user.setUsername("testUser_04");
+        when(userRepository.findByUsername("testUser_04")).thenReturn(Optional.of(user));
+
+        Optional<User> result = userService.getUserByUsername("testUser_04");
+
+        assertTrue(result.isPresent());
+        assertEquals("testUser_04", result.get().getUsername());
+
+        log.info("[UT_AM_036] result={}", result);
+    }
+
+    // Test Case ID: UT_AM_037
+    // Kiểm tra lấy ra user name của user
+    @Test
+    void testGetUserName_Success() {
+        Authentication authentication = mock(Authentication.class);
+        when(authentication.getName()).thenReturn("current.user");
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        String result = userService.getUserName();
+
+        assertEquals("current.user", result);
+
+        log.info("[UT_AM_037] username={}", result);
+    }
+
+    // Test Case ID: UT_AM_038
+    // Kiểm tra user tồn tại với username
+    @Test
+    void testExistsByUsername() {
+        when(userRepository.existsByUsername("testUser_05")).thenReturn(true);
+
+        boolean result = userService.existsByUsername("testUser_05");
+
+        assertTrue(result);
+
+        log.info("[UT_AM_038] result={}", result);
+    }
+
+    // Test Case ID: UT_AM_039
+    // Kiểm tra user tồn tại theo email
+    @Test
+    void testExistsByEmail() {
+        when(userRepository.existsByEmail("testUser_06@example.com")).thenReturn(true);
+
+        boolean result = userService.existsByEmail("testUser_06@example.com");
+
+        assertTrue(result);
+
+        log.info("[UT_AM_039] result={}", result);
+    }
+
+    // Test Case ID: UT_AM_040
+    // Kiểm tra Lấy ra User theo pageable
+    @Test
+    void testFindUsersByPage() {
+        Pageable pageable = PageRequest.of(0, 2);
+
+        User u1 = createUser(1L, "user1", "user1@example.com");
+        User u2 = createUser(2L, "user2", "user2@example.com");
+
+        Page<User> page = new PageImpl<>(Arrays.asList(u1, u2), pageable, 2);
+        when(userRepository.findAll(pageable)).thenReturn(page);
+
+        Page<User> result = userService.findUsersByPage(pageable);
+
+        assertNotNull(result);
+        assertEquals(2, result.getContent().size());
+        assertEquals(2, result.getTotalElements());
+
+        //check đúng data
+        User res1 = result.getContent().get(0);
+        assertEquals(1L, res1.getId());
+        assertEquals("user1", res1.getUsername());
+        assertEquals("user1@example.com", res1.getEmail());
+
+        User res2 = result.getContent().get(1);
+        assertEquals(2L, res2.getId());
+        assertEquals("user2", res2.getUsername());
+        assertEquals("user2@example.com", res2.getEmail());
+
+        log.info("[UT_AM_040] pageSize={}", result.getContent());
+    }
+
+    // Test Case ID: UT_AM_041
+    // Kiểm tra tìm kiếm user với trạng thái là đã xóa
+    @Test
+    void testFindUsersByDeletedStatus_Success() {
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<User> page = new PageImpl<>(Collections.singletonList(createDeletedUser(1L, true)), pageable, 1);
+        when(userRepository.findAllByDeleted(true, pageable)).thenReturn(page);
+
+        Page<User> result = userService.findUsersDeletedByPage(pageable, true);
+
+        assertEquals(1, result.getTotalElements());
+        assertTrue(result.getContent().get(0).isDeleted());
+
+        log.info("[UT_AM_041] result={}", result.getContent());
+    }
+
+    // Test Case ID: UT_AM_042
+    // Kiểm tra tìm kiếm user theo username
+    @Test
+    void testFindUsersByUsernameSearch_Success() {
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<User> page = new PageImpl<>(Collections.singletonList(createUser(9L, "search-user", "search@example.com")), pageable, 1);
+        when(userRepository.findAllByDeletedAndUsernameContains(false, "search", pageable)).thenReturn(page);
+
+        Page<User> result = userService.findAllByDeletedAndUsernameContains(false, "search", pageable);
+
+        assertEquals(1, result.getContent().size());
+        assertEquals("search-user", result.getContent().get(0).getUsername());
+
+        log.info("[UT_AM_042] result={}", result.getContent());
+    }
+
+    // Test Case ID: UT_AM_043
     // Kiểm tra tạo user với dữ liệu hợp lệ
     @Test
     void testCreateUserWithValidData() {
@@ -103,10 +224,10 @@ class UserServiceImplTest {
         assertEquals(1, created.getRoles().size());
         assertTrue(created.getRoles().contains(studentRole));
 
-        log.info("[UT_AM_036] created={}", created);
+        log.info("[UT_AM_043] created={}", created);
     }
 
-    // Test Case ID: UT_AM_037
+    // Test Case ID: UT_AM_044
     // Kiểm tra tạo user với role admin sẽ được thêm các role về lecturer, student
     @Test
     void testCreateUserWithAdminRole() {
@@ -134,10 +255,10 @@ class UserServiceImplTest {
         assertTrue(created.getRoles().contains(lecturerRole));
         assertTrue(created.getRoles().contains(studentRole));
 
-        log.info("[UT_AM_037] roles={}", created.getRoles());
+        log.info("[UT_AM_044] roles={}", created.getRoles());
     }
 
-    // Test Case ID: UT_AM_038
+    // Test Case ID: UT_AM_045
     // Kiểm tra tạo user với role là lecturer sẽ được thêm role student
     @Test
     void testCreateUserWithLecturerRole() {
@@ -162,10 +283,10 @@ class UserServiceImplTest {
         assertTrue(created.getRoles().contains(lecturerRole));
         assertTrue(created.getRoles().contains(studentRole));
 
-        log.info("[UT_AM_038] roles={}", created.getRoles());
+        log.info("[UT_AM_045] roles={}", created.getRoles());
     }
 
-    // Test Case ID: UT_AM_039
+    // Test Case ID: UT_AM_046
     // Kiểm tra tạo user với role là student
     @Test
     void testCreateUserWithStudentRole() {
@@ -187,10 +308,10 @@ class UserServiceImplTest {
         assertEquals(1, created.getRoles().size());
         assertTrue(created.getRoles().contains(studentRole));
 
-        log.info("[UT_AM_039] roles={}", created.getRoles());
+        log.info("[UT_AM_046] roles={}", created.getRoles());
     }
 
-    // Test Case ID: UT_AM_040
+    // Test Case ID: UT_AM_047
     // Kiểm tra tạo user với role null sẽ được thêm role student mặc định
     @Test
     void testCreateUserWithNullRoleName() {
@@ -212,11 +333,11 @@ class UserServiceImplTest {
         assertTrue(created.getRoles().contains(studentRole));
         verify(roleService).findByName(ERole.ROLE_STUDENT);
 
-        log.info("[UT_AM_040] created with default ROLE_STUDENT={}", created.getRoles());
+        log.info("[UT_AM_047] created with default ROLE_STUDENT={}", created.getRoles());
     }
 
 
-    // Test Case ID: UT_AM_041
+    // Test Case ID: UT_AM_048
     // Kiểm tra tạo user với role là rỗng
     @Test
     void testCreateUserWithEmptyRoles() {
@@ -234,10 +355,10 @@ class UserServiceImplTest {
 
         assertNotNull(ex);
 
-        log.info("[UT_AM_041] empty roles -> throws RuntimeException: {}", ex.getMessage());
+        log.info("[UT_AM_048] empty roles -> throws RuntimeException: {}", ex.getMessage());
     }
 
-    // Test Case ID: UT_AM_042
+    // Test Case ID: UT_AM_049
     // Kiểm tra tạo user với role không xác định
     @Test
     void testCreateUserWithUnknownRole() {
@@ -258,125 +379,7 @@ class UserServiceImplTest {
 
         assertNotNull(ex);
 
-        log.info("[UT_AM_042] unknown role (null name) -> throws RuntimeException: {}", ex.getMessage());
-    }
-
-    // Test Case ID: UT_AM_043
-    // Kiểm tra lấy ra user với username thành công
-    @Test
-    void testGetUserByUsername_Success() {
-        User user = new User();
-        user.setUsername("testUser_04");
-        when(userRepository.findByUsername("testUser_04")).thenReturn(Optional.of(user));
-
-        Optional<User> result = userService.getUserByUsername("testUser_04");
-
-        assertTrue(result.isPresent());
-        assertEquals("testUser_04", result.get().getUsername());
-
-        log.info("[UT_AM_043] result={}", result);
-    }
-
-    // Test Case ID: UT_AM_044
-    // Kiểm tra user tồn tại với username
-    @Test
-    void testExistsByUsername() {
-        when(userRepository.existsByUsername("testUser_05")).thenReturn(true);
-
-        boolean result = userService.existsByUsername("testUser_05");
-
-        assertTrue(result);
-
-        log.info("[UT_AM_044] result={}", result);
-    }
-
-    // Test Case ID: UT_AM_045
-    // Kiểm tra user tồn tại theo email
-    @Test
-    void testExistsByEmail() {
-        when(userRepository.existsByEmail("testUser_06@example.com")).thenReturn(true);
-
-        boolean result = userService.existsByEmail("testUser_06@example.com");
-
-        assertTrue(result);
-
-        log.info("[UT_AM_045] result={}", result);
-    }
-
-    // Test Case ID: UT_AM_046
-    // Kiểm tra Lấy ra User theo pageable
-    @Test
-    void testFindUsersByPage() {
-        Pageable pageable = PageRequest.of(0, 2);
-
-        User u1 = createUser(1L, "user1", "user1@example.com");
-        User u2 = createUser(2L, "user2", "user2@example.com");
-
-        Page<User> page = new PageImpl<>(Arrays.asList(u1, u2), pageable, 2);
-        when(userRepository.findAll(pageable)).thenReturn(page);
-
-        Page<User> result = userService.findUsersByPage(pageable);
-
-        assertNotNull(result);
-        assertEquals(2, result.getContent().size());
-        assertEquals(2, result.getTotalElements());
-
-        //check đúng data
-        User res1 = result.getContent().get(0);
-        assertEquals(1L, res1.getId());
-        assertEquals("user1", res1.getUsername());
-        assertEquals("user1@example.com", res1.getEmail());
-
-        User res2 = result.getContent().get(1);
-        assertEquals(2L, res2.getId());
-        assertEquals("user2", res2.getUsername());
-        assertEquals("user2@example.com", res2.getEmail());
-
-        log.info("[UT_AM_046] pageSize={}", result.getContent());
-    }
-
-    // Test Case ID: UT_AM_047
-    // Kiểm tra tìm kiếm user với trạng thái là đã xóa
-    @Test
-    void testFindUsersByDeletedStatus_Success() {
-        Pageable pageable = PageRequest.of(0, 10);
-        Page<User> page = new PageImpl<>(Collections.singletonList(createDeletedUser(1L, true)), pageable, 1);
-        when(userRepository.findAllByDeleted(true, pageable)).thenReturn(page);
-
-        Page<User> result = userService.findUsersDeletedByPage(pageable, true);
-
-        assertEquals(1, result.getTotalElements());
-        assertTrue(result.getContent().get(0).isDeleted());
-
-        log.info("[UT_AM_047] result={}", result.getContent());
-    }
-
-    // Test Case ID: UT_AM_048
-    // Kiểm tra update user thành công
-    @Test
-    void testUpdateUser_Success() {
-        User user = createUser(8L, "testUser_08", "testUser_08@example.com");
-        user.setProfile(new Profile(1L, "Updated", "Name", null));
-
-        userService.updateUser(user);
-
-        log.info("[UT_AM_048] updatedUser={}", user);
-    }
-
-    // Test Case ID: UT_AM_049
-    // Kiểm tra tìm kiếm user theo username
-    @Test
-    void testFindUsersByUsernameSearch_Success() {
-        Pageable pageable = PageRequest.of(0, 10);
-        Page<User> page = new PageImpl<>(Collections.singletonList(createUser(9L, "search-user", "search@example.com")), pageable, 1);
-        when(userRepository.findAllByDeletedAndUsernameContains(false, "search", pageable)).thenReturn(page);
-
-        Page<User> result = userService.findAllByDeletedAndUsernameContains(false, "search", pageable);
-
-        assertEquals(1, result.getContent().size());
-        assertEquals("search-user", result.getContent().get(0).getUsername());
-
-        log.info("[UT_AM_049] result={}", result.getContent());
+        log.info("[UT_AM_049] unknown role (null name) -> throws RuntimeException: {}", ex.getMessage());
     }
 
     // Test Case ID: UT_AM_050
@@ -395,6 +398,37 @@ class UserServiceImplTest {
     }
 
     // Test Case ID: UT_AM_051
+    // Tìm kiếm user không bị xóa để xuất file thành công
+    @Test
+    void testFindAllByNotDeletedToExport_Success() {
+        User user = createUser(14L, "export-user", "export@example.com");
+        user.setProfile(new Profile(2L, "Export", "User", null));
+        when(userRepository.findAllByDeleted(false)).thenReturn(Collections.singletonList(user));
+
+        List<UserExport> result = userService.findAllByDeletedToExport(false);
+
+        assertEquals(1, result.size());
+        assertEquals("export-user", result.get(0).getUsername());
+        assertEquals("export@example.com", result.get(0).getEmail());
+        assertEquals("Export", result.get(0).getFirstName());
+        assertEquals("User", result.get(0).getLastName());
+
+        log.info("[UT_AM_051] exportList={}", result);
+    }
+
+    // Test Case ID: UT_AM_052
+    // Kiểm tra update user thành công
+    @Test
+    void testUpdateUser_Success() {
+        User user = createUser(8L, "testUser_08", "testUser_08@example.com");
+        user.setProfile(new Profile(1L, "Updated", "Name", null));
+
+        userService.updateUser(user);
+
+        log.info("[UT_AM_052] updatedUser={}", user);
+    }
+
+    // Test Case ID: UT_AM_053
     // Tìm kiếm tất cả user bới intakeId
     @Test
     void testFindAllByIntakeId_Success() {
@@ -420,10 +454,135 @@ class UserServiceImplTest {
         assertEquals("intake-user-2", u2.getUsername());
         assertEquals("user2@example.com", u2.getEmail());
 
-        log.info("[UT_AM_051] result={}", result);
+        log.info("[UT_AM_053] result={}", result);
     }
 
-    // Test Case ID: UT_AM_052
+    // Test Case ID: UT_AM_054
+    // Kiểm tra yêu câu reset password thành công
+    @Test
+    void testRequestPasswordReset_Success() throws MessagingException {
+        User user = createUser(15L, "reset-user", "reset@example.com");
+        when(userRepository.findByEmail("reset@example.com")).thenReturn(Optional.of(user));
+
+        boolean result = userService.requestPasswordReset("reset@example.com");
+
+        assertTrue(result);
+
+        ArgumentCaptor<PasswordResetToken> captor = ArgumentCaptor.forClass(PasswordResetToken.class);
+        verify(passwordResetTokenRepository).save(captor.capture());
+        verify(emailService).resetPassword(eq("reset@example.com"), anyString());
+
+        PasswordResetToken savedToken = captor.getValue();
+        assertEquals(user, savedToken.getUser());
+        assertNotNull(savedToken.getToken());
+        assertFalse(savedToken.getToken().isEmpty());
+
+        log.info("[UT_AM_054] savedToken={}", savedToken.getToken());
+    }
+
+    // Test Case ID: UT_AM_055
+    // Kiểm tra reset password với user không tồn tại
+    @Test
+    void testRequestPasswordReset_UserNotFound() throws MessagingException {
+        when(userRepository.findByEmail("missing@example.com")).thenReturn(Optional.empty());
+
+        boolean result = userService.requestPasswordReset("missing@example.com");
+
+        assertFalse(result);
+
+        log.info("[UT_AM_055] result={}", result);
+    }
+
+    // Test Case ID: UT_AM_056
+    // Kiểm tra reset password thành công
+    @Test
+    void testResetPassword_Success() {
+        String token = new JwtUtils().generatePasswordResetToken(16L);
+        User user = createUser(16L, "reset-password-user", "reset-password@example.com");
+        PasswordResetToken passwordResetToken = new PasswordResetToken(1L, token, user);
+
+        when(passwordResetTokenRepository.findByToken(token)).thenReturn(passwordResetToken);
+        when(passwordEncoder.encode("new-password")).thenReturn("encoded-new-password");
+        when(userRepository.save(user)).thenReturn(userWithPassword(user, "encoded-new-password"));
+
+        boolean result = userService.resetPassword(token, "new-password");
+
+        assertTrue(result);
+        assertEquals("encoded-new-password", user.getPassword());
+
+        log.info("[UT_AM_056] result={}", result);
+    }
+
+    // Test Case ID: UT_AM_057
+    // Kiểm tra reset pasword với token hết hạn
+    @Test
+    void testResetPassword_ExpiredToken() {
+        String expiredToken = Jwts.builder()
+                .setSubject("16")
+                .setExpiration(new Date(System.currentTimeMillis() - 1000))
+                .signWith(SignatureAlgorithm.HS512, Constants.SIGNING_KEY)
+                .compact();
+
+        boolean result = userService.resetPassword(expiredToken, "new-password");
+
+        assertFalse(result);
+
+        log.info("[UT_AM_057] result={}", result);
+    }
+
+    // Test Case ID: UT_AM_058
+    // Kiểm tra reset password khi không có token
+    @Test
+    void testResetPassword_TokenNotFound() {
+        String token = new JwtUtils().generatePasswordResetToken(17L);
+        when(passwordResetTokenRepository.findByToken(token)).thenReturn(null);
+
+        boolean result = userService.resetPassword(token, "new-password");
+
+        assertFalse(result);
+
+        log.info("[UT_AM_058] result={}", result);
+    }
+
+    // Test Case ID: UT_AM_059
+    // Kiểm tra reset password với user vừa lưu trả về null
+    @Test
+    void testResetPassword_SaveReturnsNull() {
+        String token = new JwtUtils().generatePasswordResetToken(18L);
+        User user = createUser(18L, "null-save-user", "null-save@example.com");
+        PasswordResetToken passwordResetToken = new PasswordResetToken(1L, token, user);
+
+        when(passwordResetTokenRepository.findByToken(token)).thenReturn(passwordResetToken);
+        when(passwordEncoder.encode("new-password")).thenReturn("encoded-new-password");
+        when(userRepository.save(user)).thenReturn(null);
+
+        boolean result = userService.resetPassword(token, "new-password");
+
+        assertFalse(result);
+
+        log.info("[UT_AM_059] result={}", result);
+    }
+
+    // Test Case ID: UT_AM_060
+    // Kiểm tra reset password với user sau khi lưu có password khác với password được encoded
+    @Test
+    void testResetPassword_SaveReturnsUserWithDifferentPassword() {
+        String token = new JwtUtils().generatePasswordResetToken(19L);
+        User user = createUser(19L, "different-password-user", "different@example.com");
+        PasswordResetToken passwordResetToken = new PasswordResetToken(1L, token, user);
+
+        when(passwordResetTokenRepository.findByToken(token)).thenReturn(passwordResetToken);
+        when(passwordEncoder.encode("new-password")).thenReturn("encoded-new-password");
+        when(userRepository.save(user)).thenReturn(userWithPassword(new User(), "another-password"));
+
+        boolean result = userService.resetPassword(token, "new-password");
+
+        assertFalse(result);
+
+        log.info("[UT_AM_060] result={}", result);
+    }
+
+    // Test Case ID: UT_AM_061
     // Kiểm tra tìm kiếm user theo username hoặc email
     @Test
     void testFindAllByUsernameContainsOrEmailContains_Success() {
@@ -452,166 +611,7 @@ class UserServiceImplTest {
         assertTrue(res.getUsername().contains("keyword")
                 || res.getEmail().contains("keyword"));
 
-        log.info("[UT_AM_052] result={}", result.getContent());
-    }
-
-    // Test Case ID: UT_AM_053
-    // Tìm kiếm user không bị xóa để xuất file thành công
-    @Test
-    void testFindAllByNotDeletedToExport_Success() {
-        User user = createUser(14L, "export-user", "export@example.com");
-        user.setProfile(new Profile(2L, "Export", "User", null));
-        when(userRepository.findAllByDeleted(false)).thenReturn(Collections.singletonList(user));
-
-        List<UserExport> result = userService.findAllByDeletedToExport(false);
-
-        assertEquals(1, result.size());
-        assertEquals("export-user", result.get(0).getUsername());
-        assertEquals("export@example.com", result.get(0).getEmail());
-        assertEquals("Export", result.get(0).getFirstName());
-        assertEquals("User", result.get(0).getLastName());
-
-        log.info("[UT_AM_053] exportList={}", result);
-    }
-
-    // Test Case ID: UT_AM_054
-    // Kiểm tra lấy ra user name của user
-    @Test
-    void testGetUserName_Success() {
-        Authentication authentication = mock(Authentication.class);
-        when(authentication.getName()).thenReturn("current.user");
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-
-        String result = userService.getUserName();
-
-        assertEquals("current.user", result);
-
-        log.info("[UT_AM_054] username={}", result);
-    }
-
-    // Test Case ID: UT_AM_055
-    // Kiểm tra yêu câu reset password thành công
-    @Test
-    void testRequestPasswordReset_Success() throws MessagingException {
-        User user = createUser(15L, "reset-user", "reset@example.com");
-        when(userRepository.findByEmail("reset@example.com")).thenReturn(Optional.of(user));
-
-        boolean result = userService.requestPasswordReset("reset@example.com");
-
-        assertTrue(result);
-
-        ArgumentCaptor<PasswordResetToken> captor = ArgumentCaptor.forClass(PasswordResetToken.class);
-        verify(passwordResetTokenRepository).save(captor.capture());
-        verify(emailService).resetPassword(eq("reset@example.com"), anyString());
-
-        PasswordResetToken savedToken = captor.getValue();
-        assertEquals(user, savedToken.getUser());
-        assertNotNull(savedToken.getToken());
-        assertFalse(savedToken.getToken().isEmpty());
-
-        log.info("[UT_AM_055] savedToken={}", savedToken.getToken());
-    }
-
-    // Test Case ID: UT_AM_056
-    // Kiểm tra reset password với user không tồn tại
-    @Test
-    void testRequestPasswordReset_UserNotFound() throws MessagingException {
-        when(userRepository.findByEmail("missing@example.com")).thenReturn(Optional.empty());
-
-        boolean result = userService.requestPasswordReset("missing@example.com");
-
-        assertFalse(result);
-
-        log.info("[UT_AM_056] result={}", result);
-    }
-
-    // Test Case ID: UT_AM_057
-    // Kiểm tra reset password thành công
-    @Test
-    void testResetPassword_Success() {
-        String token = new JwtUtils().generatePasswordResetToken(16L);
-        User user = createUser(16L, "reset-password-user", "reset-password@example.com");
-        PasswordResetToken passwordResetToken = new PasswordResetToken(1L, token, user);
-
-        when(passwordResetTokenRepository.findByToken(token)).thenReturn(passwordResetToken);
-        when(passwordEncoder.encode("new-password")).thenReturn("encoded-new-password");
-        when(userRepository.save(user)).thenReturn(userWithPassword(user, "encoded-new-password"));
-
-        boolean result = userService.resetPassword(token, "new-password");
-
-        assertTrue(result);
-        assertEquals("encoded-new-password", user.getPassword());
-
-        log.info("[UT_AM_057] result={}", result);
-    }
-
-    // Test Case ID: UT_AM_058
-    // Kiểm tra reset pasword với token hết hạn
-    @Test
-    void testResetPassword_ExpiredToken() {
-        String expiredToken = Jwts.builder()
-                .setSubject("16")
-                .setExpiration(new Date(System.currentTimeMillis() - 1000))
-                .signWith(SignatureAlgorithm.HS512, Constants.SIGNING_KEY)
-                .compact();
-
-        boolean result = userService.resetPassword(expiredToken, "new-password");
-
-        assertFalse(result);
-
-        log.info("[UT_AM_058] result={}", result);
-    }
-
-    // Test Case ID: UT_AM_059
-    // Kiểm tra reset password khi không có token
-    @Test
-    void testResetPassword_TokenNotFound() {
-        String token = new JwtUtils().generatePasswordResetToken(17L);
-        when(passwordResetTokenRepository.findByToken(token)).thenReturn(null);
-
-        boolean result = userService.resetPassword(token, "new-password");
-
-        assertFalse(result);
-
-        log.info("[UT_AM_059] result={}", result);
-    }
-
-    // Test Case ID: UT_AM_060
-    // Kiểm tra reset password với user vừa lưu trả về null
-    @Test
-    void testResetPassword_SaveReturnsNull() {
-        String token = new JwtUtils().generatePasswordResetToken(18L);
-        User user = createUser(18L, "null-save-user", "null-save@example.com");
-        PasswordResetToken passwordResetToken = new PasswordResetToken(1L, token, user);
-
-        when(passwordResetTokenRepository.findByToken(token)).thenReturn(passwordResetToken);
-        when(passwordEncoder.encode("new-password")).thenReturn("encoded-new-password");
-        when(userRepository.save(user)).thenReturn(null);
-
-        boolean result = userService.resetPassword(token, "new-password");
-
-        assertFalse(result);
-
-        log.info("[UT_AM_060] result={}", result);
-    }
-
-    // Test Case ID: UT_AM_061
-    // Kiểm tra reset password với user sau khi lưu có password khác với password được encoded
-    @Test
-    void testResetPassword_SaveReturnsUserWithDifferentPassword() {
-        String token = new JwtUtils().generatePasswordResetToken(19L);
-        User user = createUser(19L, "different-password-user", "different@example.com");
-        PasswordResetToken passwordResetToken = new PasswordResetToken(1L, token, user);
-
-        when(passwordResetTokenRepository.findByToken(token)).thenReturn(passwordResetToken);
-        when(passwordEncoder.encode("new-password")).thenReturn("encoded-new-password");
-        when(userRepository.save(user)).thenReturn(userWithPassword(new User(), "another-password"));
-
-        boolean result = userService.resetPassword(token, "new-password");
-
-        assertFalse(result);
-
-        log.info("[UT_AM_061] result={}", result);
+        log.info("[UT_AM_061] result={}", result.getContent());
     }
 
     // Test Case ID: UT_AM_062
@@ -631,7 +631,7 @@ class UserServiceImplTest {
     }
 
     // Test Case ID: UT_AM_063
-    // Kiểm tra
+    // Kiểm tra không tìm thấy role
     @Test
     void testAddRoles_RoleNotFound() {
         Set<Role> roles = new HashSet<>();
