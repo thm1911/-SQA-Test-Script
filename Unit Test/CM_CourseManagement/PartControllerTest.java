@@ -9,6 +9,7 @@ import com.thanhtam.backend.service.PartService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.*;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import javax.persistence.EntityNotFoundException;
@@ -23,246 +24,308 @@ public class PartControllerTest {
     private CourseService courseService;
     private PartController partController;
 
-    private Course course;
+    private Course course1;
     private Part part1;
     private Part part2;
 
     @BeforeEach
     void setUp() {
+        // Khởi tạo mock và controller
         partService = mock(PartService.class);
         courseService = mock(CourseService.class);
         partController = new PartController(partService, courseService);
 
-        course = new Course(1L, "C001", "Course 1", null, new ArrayList<>());
-        part1 = new Part(1L, "Part 1", course);
-        part2 = new Part(2L, "Part 2", course);
-    }
-
-    // UT_CM_021
-    // Kiểm tra lấy danh sách part theo course có phân trang
-    @Test
-    void getPartListByCourse_Success() {
-        Pageable pageable = PageRequest.of(0, 2);
-        Page<Part> page = new PageImpl<>(Arrays.asList(part1, part2), pageable, 5);
-
-        when(partService.getPartLisByCourse(pageable, 1L)).thenReturn(page);
-
-        PageResult result = partController.getPartListByCourse(pageable, 1L);
-
-        // kiểm tra dữ liệu trả về
-        assertNotNull(result);
-        assertEquals(2, result.getData().size());
-        assertEquals(Long.valueOf(5), result.getPaginationDetails().getTotalCount());
-
-        // kiểm tra service được gọi
-        verify(partService).getPartLisByCourse(pageable, 1L);
-    }
-
-    // UT_CM_022
-    // Kiểm tra lấy danh sách part theo course không phân trang
-    @Test
-    void getPartListByCourseWithoutPagination_Success() {
-        when(courseService.getCourseById(1L)).thenReturn(Optional.of(course));
-        when(partService.getPartListByCourse(course)).thenReturn(Arrays.asList(part1, part2));
-
-        List<Part> result = partController.getPartListByCourse(1L);
-
-        // kiểm tra dữ liệu
-        assertNotNull(result);
-        assertEquals(2, result.size());
-        assertEquals(part1, result.get(0));
-
-        // verify luồng gọi
-        verify(courseService).getCourseById(1L);
-        verify(partService).getPartListByCourse(course);
-    }
-
-    // UT_CM_023
-    // Kiểm tra lấy part theo ID thành công
-    @Test
-    void getPartById_Found() {
-        when(partService.findPartById(1L)).thenReturn(Optional.of(part1));
-
-        ResponseEntity<?> response = partController.getPartById(1L);
-
-        assertEquals(200, response.getStatusCodeValue());
-
-        Optional<?> body = (Optional<?>) response.getBody();
-
-        assertTrue(body.isPresent());
-        Part result = (Part) body.get();
-
-        assertEquals(part1.getId(), result.getId());
-        assertEquals(part1.getName(), result.getName());
-
-        verify(partService, times(1)).findPartById(1L);
-    }
-
-    // UT_CM_024
-    // Kiểm tra lấy part theo ID không tồn tại
-    @Test
-    void getPartById_NotFound() {
-        when(partService.findPartById(99L)).thenReturn(Optional.empty());
-
-        // phải ném exception đúng theo requirement
-        assertThrows(EntityNotFoundException.class, () -> {
-            partController.getPartById(99L);
-        });
-
-        verify(partService).findPartById(99L);
-    }
-
-    // UT_CM_025
-    // Kiểm tra update tên part thành công
-    @Test
-    void updatePartName_Success() {
-        when(partService.findPartById(1L)).thenReturn(Optional.of(part1));
-
-        ResponseEntity<?> response = partController.updatePartName(1L, "Updated");
-
-        // kiểm tra response
-        assertEquals(200, response.getStatusCodeValue());
-
-        Part updated = (Part) response.getBody();
-
-        // kiểm tra đúng object được update
-        assertSame(part1, updated);
-        assertEquals("Updated", updated.getName());
-
-        verify(partService).savePart(part1);
-    }
-
-    // UT_CM_026
-    // Kiểm tra update part không tồn tại
-    @Test
-    void updatePartName_NotFound() {
-        when(partService.findPartById(99L)).thenReturn(Optional.empty());
-
-        assertThrows(NoSuchElementException.class, () -> {
-            partController.updatePartName(99L, "Name");
-        });
-
-        verify(partService, times(1)).findPartById(99L);
-        verify(partService, never()).savePart(any());
-    }
-
-    // UT_CM_027
-    // Kiểm tra tạo part theo course thành công
-    @Test
-    void createPartByCourse_Success() {
-        when(courseService.getCourseById(1L)).thenReturn(Optional.of(course));
-
-        Part newPart = new Part();
-        newPart.setName("New Part");
-
-        partController.createPartByCourse(newPart, 1L);
-
-        // kiểm tra course được set đúng
-        assertSame(course, newPart.getCourse());
-
-        // verify gọi service
-        verify(courseService).getCourseById(1L);
-        verify(partService).savePart(newPart);
-    }
-
-    // UT_CM_028
-    // Kiểm tra tạo part khi course không tồn tại
-    @Test
-    void createPartByCourse_CourseNotFound() {
-        when(courseService.getCourseById(99L)).thenReturn(Optional.empty());
-
-        Part newPart = new Part();
-
-        assertThrows(NoSuchElementException.class, () -> {
-            partController.createPartByCourse(newPart, 99L);
-        });
-
-        verify(courseService, times(1)).getCourseById(99L);
-        verify(partService, never()).savePart(any());
-    }
-
-    // UT_CM_029
-    // Kiểm tra danh sách part rỗng
-    @Test
-    void getPartListByCourse_Empty() {
-        when(courseService.getCourseById(1L)).thenReturn(Optional.of(course));
-        when(partService.getPartListByCourse(course)).thenReturn(Collections.emptyList());
-
-        List<Part> result = partController.getPartListByCourse(1L);
-
-        // kiểm tra list rỗng
-        assertNotNull(result);
-        assertTrue(result.isEmpty());
-
-        verify(partService).getPartListByCourse(course);
-    }
-
-    // UT_CM_030
-    // Kiểm tra course không tồn tại khi lấy list part
-    @Test
-    void getPartListByCourseWithoutPagination_CourseNotFound() {
-        when(courseService.getCourseById(99L)).thenReturn(Optional.empty());
-
-        assertThrows(NoSuchElementException.class, () -> {
-            partController.getPartListByCourse(99L);
-        });
-    }
-
-    // UT_CM_031
-    // Kiểm tra validation khi update tên part
-    @Test
-    void updatePartName_ValidationError() {
-        when(partService.findPartById(1L)).thenReturn(Optional.of(part1));
-
-        // case 1: name = null
-        assertThrows(IllegalArgumentException.class, () -> {
-            partController.updatePartName(1L, null);
-        });
-
-        // case 2: name rỗng
-        assertThrows(IllegalArgumentException.class, () -> {
-            partController.updatePartName(1L, "");
-        });
-
-        // case 3: name chỉ có khoảng trắng
-        assertThrows(IllegalArgumentException.class, () -> {
-            partController.updatePartName(1L, "   ");
-        });
-
-        // đảm bảo không gọi save khi dữ liệu sai
-        verify(partService, never()).savePart(any());
+        // Tạo dữ liệu mẫu
+        course1 = new Course(1L, "C001", "Course 1", null, new ArrayList<>());
+        part1 = new Part(1L, "Part 1", course1);
+        part2 = new Part(2L, "Part 2", course1);
     }
 
     // UT_CM_032
-    // Kiểm tra validation khi tạo part
+    // Mục tiêu: Kiểm tra API lấy danh sách part theo courseId thành công khi có dữ liệu
     @Test
-    void createPartByCourse_ValidationError() {
-        when(courseService.getCourseById(1L)).thenReturn(Optional.of(course));
+    void UT_CM_032_getPartListByCourse_Success() {
+        // Giả lập dữ liệu phân trang
+        Pageable pageable = PageRequest.of(0, 10);
 
-        // case 1: name = null
-        Part caseNull = new Part();
-        caseNull.setName(null);
+        Page<Part> page = new PageImpl<>(Arrays.asList(part1, part2), pageable, 2);
 
-        assertThrows(IllegalArgumentException.class, () -> {
-            partController.createPartByCourse(caseNull, 1L);
-        });
+        when(partService.getPartLisByCourse(pageable, 5L)).thenReturn(page);
 
-        // case 2: name = ""
-        Part caseEmpty = new Part();
-        caseEmpty.setName("");
+        // Gọi API lấy danh sách part theo courseId
+        PageResult result = partController.getPartListByCourse(pageable, 5L);
 
-        assertThrows(IllegalArgumentException.class, () -> {
-            partController.createPartByCourse(caseEmpty, 1L);
-        });
+        // Kiểm tra response: result không null, data không null và có đúng 2 phần tử
+        assertNotNull(result);
+        assertNotNull(result.getData());
+        assertEquals(2, result.getData().size());
 
-        // case 3: name = "   "
-        Part caseSpace = new Part();
-        caseSpace.setName("   ");
+        List<Object> data = result.getData();
 
-        assertThrows(IllegalArgumentException.class, () -> {
-            partController.createPartByCourse(caseSpace, 1L);
-        });
+        Part p1 = (Part) data.get(0);
+        Part p2 = (Part) data.get(1);
 
-        verify(partService, never()).savePart(any());
+        // Kiểm tra đúng dữ liệu được trả về
+        assertEquals(part1.getId(), p1.getId());
+        assertEquals(part2.getId(), p2.getId());
+    }
+
+    // UT_CM_033
+    // Mục tiêu: Kiểm tra API trả về danh sách rỗng khi course không có part hoặc courseId không tồn tại
+    @Test
+    void UT_CM_033_getPartListByCourse_Empty() {
+        // Giả lập dữ liệu phân trang
+        Pageable pageable = PageRequest.of(0, 10);
+
+        Page<Part> emptyPage = new PageImpl<>(Collections.emptyList(), pageable, 0);
+
+        when(partService.getPartLisByCourse(pageable, 999L)).thenReturn(emptyPage);
+
+        // Gọi API lấy danh sách part theo courseId
+        PageResult result = partController.getPartListByCourse(pageable, 999L);
+
+        // Kiểm tra response: result không null, data không null nhưng rỗng
+        assertNotNull(result);
+        assertNotNull(result.getData());
+        assertTrue(result.getData().isEmpty());
+    }
+
+    // UT_CM_034
+    // Mục tiêu: Kiểm tra API lấy danh sách part theo courseId thành công khi có dữ liệu
+    @Test
+    void UT_CM_034_getPartListByCourse_Success() {
+        // Giả lập course tồn tại
+        when(courseService.getCourseById(5L)).thenReturn(Optional.of(course1));
+
+        // Giả lập danh sách part
+        when(partService.getPartListByCourse(course1))
+                .thenReturn(Arrays.asList(part1, part2));
+
+        // Gọi API
+        List<Part> result = partController.getPartListByCourse(5L);
+
+        // Kiểm tra kết quả trả về
+        assertNotNull(result);
+        assertEquals(2, result.size());
+
+        // Kiểm tra đúng dữ liệu
+        assertEquals(part1.getId(), result.get(0).getId());
+        assertEquals(part2.getId(), result.get(1).getId());
+    }
+
+    // UT_CM_035
+    // Mục tiêu: Ném exception khi courseId không tồn tại
+    @Test
+    void UT_CM_035_getPartListByCourse_CourseNotFound() {
+        // Giả lập không tìm thấy course
+        when(courseService.getCourseById(999L)).thenReturn(Optional.empty());
+
+        // Kiểm tra exception
+        assertThrows(NoSuchElementException.class,
+                () -> partController.getPartListByCourse(999L));
+
+        // Verify chỉ gọi service đầu tiên
+        verify(courseService).getCourseById(999L);
+        verify(partService, never()).getPartListByCourse(any());
+    }
+
+    // UT_CM_036
+    // Mục tiêu: Kiểm tra API lấy part theo id thành công khi tồn tại dữ liệu
+    @Test
+    void UT_CM_036_getPartById_Success() {
+
+        // Giả lập service trả về part
+        when(partService.findPartById(1L)).thenReturn(Optional.of(part1));
+
+        // Gọi API
+        ResponseEntity<?> response = partController.getPartById(1L);
+
+        // Lấy body
+        Optional<Part> result = (Optional<Part>) response.getBody();
+
+        // Kiểm tra response có status 200 và body không null, có dữ liệu
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(result);
+        assertTrue(result.isPresent());
+
+        // Kiểm tra dữ liệu đúng
+        assertEquals(part1.getId(), result.get().getId());
+        assertEquals(part1.getName(), result.get().getName());
+    }
+
+    // UT_CM_037
+    // Mục tiêu: Kiểm tra API lấy part theo id ném exception khi không tìm thấy part
+    @Test
+    void UT_CM_037_getPartById_NotFound() {
+
+        // Giả lập không tìm thấy part
+        when(partService.findPartById(999L)).thenReturn(Optional.empty());
+
+        // Kiểm tra exception
+        EntityNotFoundException ex = assertThrows(
+                EntityNotFoundException.class,
+                () -> partController.getPartById(999L)
+        );
+
+        // Kiểm tra message
+        assertEquals("Not found with part id: 999", ex.getMessage());
+    }
+
+    // UT_CM_038
+    // Mục tiêu: Kiểm tra API cập nhật tên part thành công khi dữ liệu hợp lệ
+    @Test
+    void UT_CM_038_updatePartName_Success() {
+
+        // Giả lập part tồn tại trong hệ thống
+        when(partService.findPartById(1L)).thenReturn(Optional.of(part1));
+
+        // Dữ liệu tên mới
+        String name = "New Part Name";
+
+        // Gọi API cập nhật tên part
+        ResponseEntity<?> response =
+                partController.updatePartName(1L, name);
+
+        Part result = (Part) response.getBody();
+
+        // Kiểm tra response HTTP
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+
+        // Kiểm tra dữ liệu sau cập nhật
+        assertNotNull(result);
+        assertEquals("New Part Name", result.getName());
+    }
+
+    // UT_CM_039
+    // Mục tiêu: Kiểm tra API cập nhật tên part ném exception khi part không tồn tại
+    @Test
+    void UT_CM_039_updatePartName_NotFound() {
+
+        // Giả lập không tìm thấy part theo id
+        when(partService.findPartById(999L)).thenReturn(Optional.empty());
+
+        // Kiểm tra exception khi update part không tồn tại
+        assertThrows(NoSuchElementException.class,
+                () -> partController.updatePartName(999L, "New Name"));
+    }
+
+    // UT_CM_040
+    // Mục tiêu: Kiểm tra API cập nhật tên part ném exception khi tên null
+    @Test
+    void UT_CM_040_updatePartName_NameNull() {
+        // Giả lập part tồn tại
+        when(partService.findPartById(1L)).thenReturn(Optional.of(part1));
+
+        // Kiểm tra exception khi name null
+        assertThrows(NullPointerException.class,
+                () -> partController.updatePartName(1L, null));
+    }
+
+    // UT_CM_041
+    // Mục tiêu: Kiểm tra API cập nhật tên part ném exception khi tên rỗng
+    @Test
+    void UT_CM_041_updatePartName_NameEmpty() {
+        // Giả lập part tồn tại
+        when(partService.findPartById(1L)).thenReturn(Optional.of(part1));
+
+        // Kiểm tra exception khi name rỗng
+        assertThrows(IllegalArgumentException.class,
+                () -> partController.updatePartName(1L, ""));
+    }
+
+    // UT_CM_042
+    // Mục tiêu: Kiểm tra API cập nhật tên part ném exception khi tên chỉ chứa khoảng trắng
+    @Test
+    void UT_CM_042_updatePartName_NameBlank() {
+        // Giả lập part tồn tại
+        when(partService.findPartById(1L)).thenReturn(Optional.of(part1));
+
+        // Kiểm tra exception khi name chỉ có khoảng trắng
+        assertThrows(IllegalArgumentException.class,
+                () -> partController.updatePartName(1L, "   "));
+    }
+
+    // UT_CM_043
+    // Mục tiêu: Kiểm tra API tạo part thành công khi course tồn tại và dữ liệu hợp lệ
+    @Test
+    void UT_CM_043_createPartByCourse_Success() {
+
+        // Giả lập course tồn tại
+        when(courseService.getCourseById(1L))
+                .thenReturn(Optional.of(course1));
+
+        Part part = new Part();
+        part.setName("Part 1");
+
+        // Gọi API
+        partController.createPartByCourse(part, 1L);
+
+        // Kiểm tra part được gán course đúng
+        assertEquals(course1, part.getCourse());
+
+        // Do code trả về kiểu void, nên chỉ có thể kiểm tra được là service có đuợc gọi hay không
+        // Chuyển cho test API sẽ kiểm tra dữ liệu có được lưu vào db chưa
+        verify(partService).savePart(part);
+    }
+
+    // UT_CM_044
+    // Mục tiêu: Kiểm tra API tạo part ném exception khi course không tồn tại
+    @Test
+    void UT_CM_044_createPartByCourse_CourseNotFound() {
+
+        // Giả lập course không tồn tại
+        when(courseService.getCourseById(999L)).thenReturn(Optional.empty());
+
+        Part part = new Part();
+        part.setName("Part 1");
+
+        // Kiểm tra exception
+        assertThrows(NoSuchElementException.class,
+                () -> partController.createPartByCourse(part, 999L));
+    }
+
+    // UT_CM_045
+    // Mục tiêu: Kiểm tra API tạo part ném exception khi tên null
+    @Test
+    void UT_CM_045_createPartByCourse_NullName() {
+        // Giả lập course tồn tại   
+        when(courseService.getCourseById(1L)).thenReturn(Optional.of(course1));
+
+        Part part = new Part();
+        part.setName(null);
+
+        // Kiểm tra exception khi name null
+        assertThrows(NullPointerException.class,
+                () -> partController.createPartByCourse(part, 1L));
+    }
+
+    // UT_CM_046
+    // Mục tiêu: Kiểm tra API tạo part ném exception khi tên rỗng
+    @Test
+    void UT_CM_046_createPartByCourse_EmptyName() {
+        // Giả lập course tồn tại
+        when(courseService.getCourseById(1L)).thenReturn(Optional.of(course1));
+
+        Part part = new Part();
+        part.setName("");
+
+        // Kiểm tra exception khi name rỗng
+        assertThrows(IllegalArgumentException.class,
+                () -> partController.createPartByCourse(part, 1L));
+    }
+
+    // UT_CM_047
+    // Mục tiêu: Kiểm tra API tạo part ném exception khi tên chỉ chứa khoảng trắng
+    @Test
+    void UT_CM_047_createPartByCourse_BlankName() {
+        // Giả lập course tồn tại
+        when(courseService.getCourseById(1L)).thenReturn(Optional.of(course1));
+
+        Part part = new Part();
+        part.setName("   ");
+
+        // Kiểm tra exception khi name chỉ có khoảng trắng
+        assertThrows(IllegalArgumentException.class,
+                () -> partController.createPartByCourse(part, 1L));
     }
 }

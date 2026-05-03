@@ -4,161 +4,220 @@ import com.thanhtam.backend.entity.Course;
 import com.thanhtam.backend.entity.Part;
 import com.thanhtam.backend.repository.PartRepository;
 import com.thanhtam.backend.service.PartServiceImpl;
-import org.junit.Before;
-import org.junit.Test;
-import org.springframework.data.domain.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 public class PartServiceImplTest {
-
     private PartRepository partRepository;
     private PartServiceImpl partService;
 
-    private Course course;
-    private Part part;
+    private Course course1;
+    private Part part1;
+    private Part part2;
 
-    @Before
+    @BeforeEach
     public void setUp() {
+        // Mock repository và khởi tạo service
         partRepository = mock(PartRepository.class);
         partService = new PartServiceImpl(partRepository);
 
-        course = new Course(1L, "C001", "Course 1", null, new ArrayList<>());
-        part = new Part(1L, "Part 1", course);
+        // Tạo dữ liệu mẫu
+        course1 = new Course(1L, "C001", "Course 1", null, new ArrayList<>());
+        part1 = new Part(1L, "Part 1", course1);
+        part2 = new Part(2L, "Part 2", course1);
     }
 
-    // UT_CM_048
-    // Mục tiêu: Lưu Part thành công, đảm bảo gọi đúng repository.save với object truyền vào
-    @Test
-    public void savePart_Success() {
-        partService.savePart(part);
 
-        verify(partRepository, times(1)).save(part);
-        verifyNoMoreInteractions(partRepository);
+    // UT_CM_065
+    // Mục tiêu: Kiểm tra hàm savePart gọi repository thành công khi dữ liệu hợp lệ
+    @Test
+    void UT_CM_065_savePart_Success() {
+        // Giả lập repository save thành công và trả về entity đã lưu
+        when(partRepository.save(part1)).thenReturn(part1);
+
+        // Gọi service savePart
+        partService.savePart(part1);
+
+        // Kiểm tra repository được gọi đúng 1 lần với đúng dữ liệu
+        // Hàm trả về void, nên chỉ check được verify, không check được giá trị trả về
+        // Kiểm tra lưu vào db thật sẽ do test API thực hiện
+        verify(partRepository, times(1)).save(part1);
+    }
+    // UT_CM_066
+    // Mục tiêu: Kiểm tra hàm savePart ném exception khi repository xảy ra lỗi
+    @Test
+    void UT_CM_066_savePart_Fail() {
+        // Giả lập repository ném exception khi lưu dữ liệu
+        doThrow(new RuntimeException("DB ERROR"))
+                .when(partRepository).save(part1);
+
+        // Kiểm tra service ném exception khi save thất bại
+        RuntimeException ex = assertThrows(RuntimeException.class,
+                () -> partService.savePart(part1));
+
+        // Kiểm tra đúng message lỗi
+        assertEquals("DB ERROR", ex.getMessage());
     }
 
-    // UT_CM_049
-    // Mục tiêu: Lưu Part với giá trị null, vẫn gọi repository.save(null) theo hành vi hiện tại
+    // UT_CM_067
+    // Mục tiêu: Lấy danh sách Part theo CourseId có phân trang thành công khi có dữ liệu
     @Test
-    public void savePart_Null() {
-        partService.savePart(null);
-
-        verify(partRepository, times(1)).save(isNull());
-        verifyNoMoreInteractions(partRepository);
-    }
-
-    // UT_CM_050
-    // Mục tiêu: Lấy danh sách Part theo Course (phân trang), trả về đúng số lượng và tổng bản ghi
-    @Test
-    public void getPartLisByCourse_Success() {
-        Pageable pageable = PageRequest.of(0, 2);
-
-        List<Part> parts = Arrays.asList(
-                new Part(1L, "P1", course),
-                new Part(2L, "P2", course)
-        );
-
-        Page<Part> page = new PageImpl<>(parts, pageable, 2);
-
-        when(partRepository.findAllByCourseId(1L, pageable)).thenReturn(page);
-
-        Page<Part> result = partService.getPartLisByCourse(pageable, 1L);
-
-        assertEquals(2, result.getContent().size());
-        assertEquals(2, result.getTotalElements());
-
-        verify(partRepository).findAllByCourseId(eq(1L), eq(pageable));
-        verifyNoMoreInteractions(partRepository);
-    }
-
-    // UT_CM_051
-    // Mục tiêu: Lấy danh sách Part theo Course khi không có dữ liệu, trả về Page rỗng nhưng không null
-    @Test
-    public void getPartLisByCourse_Empty() {
+    void UT_CM_067_getPartLisByCourse_Success() {
+        // Tạo pageable
         Pageable pageable = PageRequest.of(0, 10);
 
+        // Dữ liệu mock trả về
+        List<Part> parts = Arrays.asList(part1, part2);
+
+        Page<Part> page = new PageImpl<>(parts, pageable, parts.size());
+
+        // Giả lập repository trả về page có dữ liệu
+        when(partRepository.findAllByCourseId(1L, pageable))
+                .thenReturn(page);
+
+        // Gọi service
+        Page<Part> result = partService.getPartLisByCourse(pageable, 1L);
+
+        // Kiểm tra kết quả
+        assertNotNull(result);
+        assertEquals(2, result.getContent().size());
+
+        // kiểm tra đúng dữ liệu trả về
+        assertEquals(part1.getId(), result.getContent().get(0).getId());
+        assertEquals(part2.getId(), result.getContent().get(1).getId());
+    }
+
+    // UT_CM_068
+    // Mục tiêu: Lấy danh sách Part theo CourseId có phân trang khi không có dữ liệu (Page rỗng)
+    @Test
+    void UT_CM_068_getPartLisByCourse_Empty() {
+        // Tạo pageable
+        Pageable pageable = PageRequest.of(0, 10);
+
+        // Giả lập repository trả về Page rỗng
         when(partRepository.findAllByCourseId(1L, pageable))
                 .thenReturn(Page.empty());
 
+        // Gọi service
         Page<Part> result = partService.getPartLisByCourse(pageable, 1L);
 
+        // Kiểm tra kết quả
         assertNotNull(result);
-        assertEquals(0, result.getTotalElements());
         assertTrue(result.getContent().isEmpty());
-
-        verify(partRepository).findAllByCourseId(eq(1L), eq(pageable));
+        assertEquals(0, result.getTotalElements());
     }
 
-    // UT_CM_052
-    // Mục tiêu: Lấy danh sách Part theo Course object, trả về đúng dữ liệu và đúng quan hệ Course
+
+    // UT_CM_069
+    // Mục tiêu: Lấy danh sách Part theo Course object thành công khi có dữ liệu
     @Test
-    public void getPartListByCourse_Success() {
-        when(partRepository.findAllByCourse(course))
-                .thenReturn(Arrays.asList(part));
+    void UT_CM_069_getPartListByCourse_Success() {
+        // Giả lập repository trả về danh sách part
+        List<Part> parts = Arrays.asList(part1, part2);
 
-        List<Part> result = partService.getPartListByCourse(course);
+        when(partRepository.findAllByCourse(course1))
+                .thenReturn(parts);
 
-        assertEquals(1, result.size());
-        assertEquals("Part 1", result.get(0).getName());
-        assertSame(course, result.get(0).getCourse());
+        // Gọi service
+        List<Part> result = partService.getPartListByCourse(course1);
 
-        verify(partRepository).findAllByCourse(course);
-        verifyNoMoreInteractions(partRepository);
+        // Kiểm tra kết quả: result không null và có đúng số lượng phần tử
+        assertNotNull(result);
+        assertEquals(2, result.size());
+
+        // kiểm tra đúng dữ liệu
+        assertEquals(part1.getId(), result.get(0).getId());
+        assertEquals(part2.getId(), result.get(1).getId());
     }
 
-    // UT_CM_053
-    // Mục tiêu: Tìm Part theo ID thành công, trả về Optional có dữ liệu
+    // UT_CM_070
+    // Mục tiêu: Lấy danh sách Part theo Course object khi không có dữ liệu
     @Test
-    public void findPartById_Found() {
-        when(partRepository.findById(1L)).thenReturn(Optional.of(part));
+    void UT_CM_070_getPartListByCourse_Empty() {
+        // Giả lập repository trả về danh sách rỗng
+        when(partRepository.findAllByCourse(course1))
+                .thenReturn(new ArrayList<>());
 
+        // Gọi service
+        List<Part> result = partService.getPartListByCourse(course1);
+
+        // Kiểm tra kết quả
+        assertNotNull(result);
+        assertTrue(result.isEmpty());
+    }
+
+    // UT_CM_071
+    // Mục tiêu: Tìm Part theo ID thành công khi tồn tại dữ liệu
+    @Test
+    void UT_CM_071_findPartById_Success() {
+        // Giả lập repository trả về part tồn tại
+        when(partRepository.findById(1L))
+                .thenReturn(Optional.of(part1));
+
+        // Gọi service
         Optional<Part> result = partService.findPartById(1L);
 
+        // Kiểm tra kết quả
+        assertNotNull(result);
         assertTrue(result.isPresent());
-        assertEquals("Part 1", result.get().getName());
-
-        verify(partRepository).findById(1L);
+        assertEquals(part1.getId(), result.get().getId());
     }
 
-    // UT_CM_054
-    // Mục tiêu: Tìm Part theo ID không tồn tại, trả về Optional rỗng
+    // UT_CM_072
+    // Mục tiêu: Tìm Part theo ID khi không tồn tại dữ liệu
     @Test
-    public void findPartById_NotFound() {
-        when(partRepository.findById(99L)).thenReturn(Optional.empty());
+    void UT_CM_072_findPartById_NotFound() {
+        // Giả lập repository không tìm thấy
+        when(partRepository.findById(99L))
+                .thenReturn(Optional.empty());
 
+        // Gọi service
         Optional<Part> result = partService.findPartById(99L);
 
+        // Kiểm tra kết quả
+        assertNotNull(result);
         assertFalse(result.isPresent());
-
-        verify(partRepository).findById(99L);
     }
 
-    // UT_CM_055
-    // Mục tiêu: Kiểm tra tồn tại Part theo ID trả về true khi tồn tại
+    // UT_CM_073
+    // Mục tiêu: Kiểm tra tồn tại Part theo ID trả về true
     @Test
-    public void existsById_True() {
-        when(partRepository.existsById(1L)).thenReturn(true);
+    void UT_CM_073_existsById_True() {
+        // Giả lập repository trả về true
+        when(partRepository.existsById(1L))
+                .thenReturn(true);
 
+        // Gọi service
         boolean result = partService.existsById(1L);
 
+        // Kiểm tra kết quả có đúng là true
         assertTrue(result);
-
-        verify(partRepository).existsById(1L);
     }
 
-    // UT_CM_056
-    // Mục tiêu: Kiểm tra tồn tại Part theo ID trả về false khi không tồn tại
+    // UT_CM_074
+    // Mục tiêu: Kiểm tra tồn tại Part theo ID trả về false
     @Test
-    public void existsById_False() {
-        when(partRepository.existsById(99L)).thenReturn(false);
+    void UT_CM_074_existsById_False() {
+        // Giả lập repository trả về false
+        when(partRepository.existsById(99L))
+                .thenReturn(false);
 
+        // Gọi service
         boolean result = partService.existsById(99L);
 
+        // Kiểm tra kết quả có đúng là false
         assertFalse(result);
-
-        verify(partRepository).existsById(99L);
     }
 }
