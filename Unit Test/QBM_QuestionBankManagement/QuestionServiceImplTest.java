@@ -12,10 +12,13 @@ import com.thanhtam.backend.ultilities.DifficultyLevel;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -30,10 +33,16 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @Slf4j
+@SpringBootTest
+@Transactional
 class QuestionServiceImplTest {
 
     private QuestionRepository mockQuestionRepository = mock(QuestionRepository.class);
     private QuestionServiceImpl questionService = new QuestionServiceImpl(mockQuestionRepository);
+    @Autowired
+    private com.thanhtam.backend.service.QuestionService realQuestionService;
+    @Autowired
+    private QuestionRepository realQuestionRepository;
 
     @BeforeEach
     void setUp() {
@@ -724,64 +733,72 @@ class QuestionServiceImplTest {
     // Kiểm tra lưu câu hỏi mức EASY — gán điểm 5 và gọi repository.save
     @Test
     void save_WithEasyDifficulty_SetsPoint5() {
-        Question q = new Question();
-        q.setId(1L);
+        Question q = loadQuestion265OrThrow();
         q.setDifficultyLevel(DifficultyLevel.EASY);
 
-        questionService.save(q);
+        realQuestionService.save(q);
 
-        verify(mockQuestionRepository).save(q);
-        assertEquals(5, q.getPoint());
+        Question reloaded = realQuestionRepository.findById(265L).orElseThrow(NoSuchElementException::new);
+        assertEquals(5, reloaded.getPoint());
+        log.info("save_WithEasyDifficulty_SetsPoint5 - questionId=265, point={}", reloaded.getPoint());
     }
 
     // Test Case ID: UT_QBM_075
     // Kiểm tra lưu câu hỏi mức MEDIUM — gán điểm 10
     @Test
     void save_WithMediumDifficulty_SetsPoint10() {
-        Question q = new Question();
+        Question q = loadQuestion265OrThrow();
         q.setDifficultyLevel(DifficultyLevel.MEDIUM);
 
-        questionService.save(q);
+        realQuestionService.save(q);
 
-        verify(mockQuestionRepository).save(q);
-        assertEquals(10, q.getPoint());
+        Question reloaded = realQuestionRepository.findById(265L).orElseThrow(NoSuchElementException::new);
+        assertEquals(10, reloaded.getPoint());
+        log.info("save_WithMediumDifficulty_SetsPoint10 - questionId=265, point={}", reloaded.getPoint());
     }
 
     // Test Case ID: UT_QBM_076
     // Kiểm tra lưu câu hỏi mức HARD — gán điểm 15
     @Test
     void save_WithHardDifficulty_SetsPoint15() {
-        Question q = new Question();
+        Question q = loadQuestion265OrThrow();
         q.setDifficultyLevel(DifficultyLevel.HARD);
 
-        questionService.save(q);
+        realQuestionService.save(q);
 
-        verify(mockQuestionRepository).save(q);
-        assertEquals(15, q.getPoint());
+        Question reloaded = realQuestionRepository.findById(265L).orElseThrow(NoSuchElementException::new);
+        assertEquals(15, reloaded.getPoint());
+        log.info("save_WithHardDifficulty_SetsPoint15 - questionId=265, point={}", reloaded.getPoint());
     }
 
     // Test Case ID: UT_QBM_077
     // Kiểm tra difficultyLevel null — switch ném NullPointerException
     @Test
     void save_WithNullDifficulty_ThrowsNullPointerException() {
-        Question q = new Question();
+        Question q = loadQuestion265OrThrow();
         q.setDifficultyLevel(null);
 
-        assertThrows(NullPointerException.class, () -> questionService.save(q));
+        NullPointerException ex = assertThrows(NullPointerException.class, () -> realQuestionService.save(q));
+        log.info("save_WithNullDifficulty_ThrowsNullPointerException - questionId=265 threw: {} - {}", ex.getClass().getSimpleName(), ex.getMessage());
     }
 
     // Test Case ID: UT_QBM_078
     // Kiểm tra mức độ khác (OTHER) — rơi vào default, gán điểm 0
     @Test
     void save_WithOtherDifficulty_SetsPoint0() {
-        Question q = new Question();
+        Question q = loadQuestion265OrThrow();
         q.setDifficultyLevel(DifficultyLevel.OTHER);
 
-        questionService.save(q);
+        realQuestionService.save(q);
 
-        verify(mockQuestionRepository).save(q);
-        assertEquals(0, q.getPoint());
-        log.info(String.valueOf(q.getPoint()));
+        Question reloaded = realQuestionRepository.findById(265L).orElseThrow(NoSuchElementException::new);
+        assertEquals(0, reloaded.getPoint());
+        log.info("save_WithOtherDifficulty_SetsPoint0 - questionId=265, point={}", reloaded.getPoint());
+    }
+
+    private Question loadQuestion265OrThrow() {
+        return realQuestionRepository.findById(265L)
+                .orElseThrow(() -> new NoSuchElementException("Khong tim thay question id = 265"));
     }
 
 }

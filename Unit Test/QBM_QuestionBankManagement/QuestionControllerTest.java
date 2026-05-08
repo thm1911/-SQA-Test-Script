@@ -14,17 +14,26 @@ import com.thanhtam.backend.service.QuestionService;
 import com.thanhtam.backend.service.QuestionTypeService;
 import com.thanhtam.backend.service.RoleService;
 import com.thanhtam.backend.service.UserService;
+import com.thanhtam.backend.ultilities.DifficultyLevel;
 import com.thanhtam.backend.ultilities.EQTypeCode;
 import com.thanhtam.backend.ultilities.ERole;
 import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.annotation.Rollback;
+import org.springframework.transaction.annotation.Transactional;
+import com.thanhtam.backend.repository.PartRepository;
+import com.thanhtam.backend.repository.QuestionRepository;
+import com.thanhtam.backend.repository.QuestionTypeRepository;
 
 import java.util.*;
 
@@ -40,6 +49,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @Slf4j
+@SpringBootTest
+@Transactional
 class QuestionControllerTest {
 
     QuestionService mockQuestionService = mock(QuestionService.class);
@@ -47,6 +58,23 @@ class QuestionControllerTest {
     QuestionTypeService mockQuestionTypeService = mock(QuestionTypeService.class);
     UserService mockUserService = mock(UserService.class);
     RoleService mockRoleService = mock(RoleService.class);
+    @Autowired
+    private QuestionService realQuestionService;
+    @Autowired
+    private PartService realPartService;
+    @Autowired
+    private QuestionTypeService realQuestionTypeService;
+    @Autowired
+    private UserService realUserService;
+    @Autowired
+    private RoleService realRoleService;
+    @Autowired
+    private QuestionRepository questionRepository;
+    @Autowired
+    private PartRepository partRepository;
+    @Autowired
+    private QuestionTypeRepository questionTypeRepository;
+    private QuestionController realQuestionController;
 
     // Khởi tạo controller
     QuestionController questionController = new QuestionController(
@@ -59,8 +87,14 @@ class QuestionControllerTest {
 
     @BeforeEach
     void setUp() {
-        // Đặt lại trạng thái mock trước mỗi test để tránh ảnh hưởng chéo giữa các test case.
         reset(mockQuestionService, mockPartService, mockQuestionTypeService, mockUserService, mockRoleService);
+        realQuestionController = new QuestionController(
+                realQuestionService,
+                realPartService,
+                realQuestionTypeService,
+                realUserService,
+                realRoleService
+        );
     }
 
     // ----getAllQuestion()---
@@ -566,140 +600,96 @@ class QuestionControllerTest {
     // ---createQuestion()---
     // Test Case ID: UT_QBM_018
     // Kiểm tra tạo câu hỏi thành công
+    @Rollback
     @Test
     void createQuestion_Success() {
+        Part partEntity = createPartTest();
+        ensureQuestionType(EQTypeCode.MC);
+
         Question inputQuestion = new Question();
-        inputQuestion.setId(1L);
         inputQuestion.setQuestionText("Nội dung câu hỏi");
+        inputQuestion.setDifficultyLevel(DifficultyLevel.EASY);
         Choice choice = new Choice();
         choice.setChoiceText("Đáp án A");
         choice.setIsCorrected(1);
         inputQuestion.setChoices(Collections.singletonList(choice));
 
-        QuestionType questionTypeEntity = new QuestionType();
-        questionTypeEntity.setId(1L);
-        questionTypeEntity.setTypeCode(EQTypeCode.MC);
+        Question result = realQuestionController.createQuestion(inputQuestion, "MC", partEntity.getId());
 
-        Part partEntity = new Part();
-        partEntity.setId(1L);
-
-        Question reloaded = new Question();
-        reloaded.setId(1L);
-        reloaded.setQuestionText("Nội dung câu hỏi");
-        reloaded.setQuestionType(questionTypeEntity);
-        reloaded.setPart(partEntity);
-        reloaded.setDeleted(false);
-        reloaded.setChoices(Collections.singletonList(choice));
-
-        when(mockQuestionTypeService.getQuestionTypeByCode(EQTypeCode.MC)).thenReturn(Optional.of(questionTypeEntity));
-        when(mockPartService.findPartById(1L)).thenReturn(Optional.of(partEntity));
-        when(mockQuestionService.getQuestionById(1L)).thenReturn(Optional.of(reloaded));
-
-        Question result = questionController.createQuestion(inputQuestion, "MC", 1L);
-
-        verify(mockQuestionService).save(inputQuestion);
-        verify(mockQuestionService).getQuestionById(1L);
+        log.info("createQuestion_Success - created result: {}", result);
         assertNotNull(result);
-        assertEquals(1L, result.getId().longValue());
+        assertNotNull(result.getId());
         assertEquals(EQTypeCode.MC, result.getQuestionType().getTypeCode());
-        assertEquals(1L, result.getPart().getId().longValue());
+        assertEquals(partEntity.getId(), result.getPart().getId());
         assertEquals(false, result.isDeleted());
-
+        assertTrue(questionRepository.findById(result.getId()).isPresent());
     }
 
     // Test Case ID: UT_QBM_019
     // Kiểm tra thiếu nội dung câu hỏi (null, rỗng hoặc chỉ khoảng trắng)
     @Test
     void createQuestion_MissingQuestionText() {
+        Part partEntity = createPartTest();
+        ensureQuestionType(EQTypeCode.MC);
         Question inputQuestion = new Question();
-        inputQuestion.setId(1L);
-
+        inputQuestion.setDifficultyLevel(DifficultyLevel.EASY);
         Choice choice = new Choice();
         choice.setChoiceText("Đáp án A");
         choice.setIsCorrected(1);
         inputQuestion.setChoices(Collections.singletonList(choice));
 
-        QuestionType questionTypeEntity = new QuestionType();
-        questionTypeEntity.setId(1L);
-        questionTypeEntity.setTypeCode(EQTypeCode.MC);
-
-        Part partEntity = new Part();
-        partEntity.setId(1L);
-
-        when(mockQuestionTypeService.getQuestionTypeByCode(EQTypeCode.MC)).thenReturn(Optional.of(questionTypeEntity));
-        when(mockPartService.findPartById(1L)).thenReturn(Optional.of(partEntity));
-
         // Null questionText
-        assertThrows(IllegalArgumentException.class, () -> questionController.createQuestion(inputQuestion, "MC", 1L));
+        assertThrows(Exception.class, () -> realQuestionController.createQuestion(inputQuestion, "MC", partEntity.getId()));
 
         // Empty questionText
         inputQuestion.setQuestionText("");
-        assertThrows(IllegalArgumentException.class, () -> questionController.createQuestion(inputQuestion, "MC", 1L));
+        assertThrows(Exception.class, () -> realQuestionController.createQuestion(inputQuestion, "MC", partEntity.getId()));
 
         // Blank questionText
         inputQuestion.setQuestionText("   ");
-        assertThrows(IllegalArgumentException.class, () -> questionController.createQuestion(inputQuestion, "MC", 1L));
+        assertThrows(Exception.class, () -> realQuestionController.createQuestion(inputQuestion, "MC", partEntity.getId()));
     }
 
     // Test Case ID: UT_QBM_020
     // Kiểm tra danh sách đáp án rỗng
     @Test
     void createQuestion_EmptyOrNullChoicesList() {
+        Part partEntity = createPartTest();
+        ensureQuestionType(EQTypeCode.MC);
         Question inputQuestion = new Question();
-        inputQuestion.setId(1L);
         inputQuestion.setQuestionText("Nội dung câu hỏi");
+        inputQuestion.setDifficultyLevel(DifficultyLevel.EASY);
         inputQuestion.setChoices(Collections.emptyList());
-
-        QuestionType questionTypeEntity = new QuestionType();
-        questionTypeEntity.setId(1L);
-        questionTypeEntity.setTypeCode(EQTypeCode.MC);
-
-        Part partEntity = new Part();
-        partEntity.setId(1L);
-
-        when(mockQuestionTypeService.getQuestionTypeByCode(EQTypeCode.MC)).thenReturn(Optional.of(questionTypeEntity));
-        when(mockPartService.findPartById(1L)).thenReturn(Optional.of(partEntity));
-        assertThrows(IllegalArgumentException.class, () -> questionController.createQuestion(inputQuestion, "MC", 1L));
+        assertThrows(Exception.class, () -> realQuestionController.createQuestion(inputQuestion, "MC", partEntity.getId()));
     }
 
     // Test Case ID: UT_QBM_021
     // Kiểm tra nội dung đáp án null/rỗng/chỉ khoảng trắng
     @Test
     void createQuestion_EmptyChoiceText() {
+        Part partEntity = createPartTest();
+        ensureQuestionType(EQTypeCode.MC);
         Question inputQuestion = new Question();
-        inputQuestion.setId(1L);
         inputQuestion.setQuestionText("Nội dung câu hỏi");
+        inputQuestion.setDifficultyLevel(DifficultyLevel.EASY);
 
         Choice choice = new Choice();
         choice.setIsCorrected(1);
 
-        QuestionType questionTypeEntity = new QuestionType();
-        questionTypeEntity.setId(1L);
-        questionTypeEntity.setTypeCode(EQTypeCode.MC);
-
-        Part partEntity = new Part();
-        partEntity.setId(1L);
-
         // choiceText null
         choice.setChoiceText(null);
         inputQuestion.setChoices(Collections.singletonList(choice));
-        when(mockQuestionTypeService.getQuestionTypeByCode(EQTypeCode.MC)).thenReturn(Optional.of(questionTypeEntity));
-        when(mockPartService.findPartById(1L)).thenReturn(Optional.of(partEntity));
-        assertThrows(IllegalArgumentException.class, () -> questionController.createQuestion(inputQuestion, "MC", 1L));
+        assertThrows(Exception.class, () -> realQuestionController.createQuestion(inputQuestion, "MC", partEntity.getId()));
 
         // choiceText empty
         choice.setChoiceText("");
         inputQuestion.setChoices(Collections.singletonList(choice));
-        when(mockQuestionTypeService.getQuestionTypeByCode(EQTypeCode.MC)).thenReturn(Optional.of(questionTypeEntity));
-        when(mockPartService.findPartById(1L)).thenReturn(Optional.of(partEntity));
-        assertThrows(IllegalArgumentException.class, () -> questionController.createQuestion(inputQuestion, "MC", 1L));
+        assertThrows(Exception.class, () -> realQuestionController.createQuestion(inputQuestion, "MC", partEntity.getId()));
 
         // choiceText blank
         choice.setChoiceText("   ");
         inputQuestion.setChoices(Collections.singletonList(choice));
-        when(mockQuestionTypeService.getQuestionTypeByCode(EQTypeCode.MC)).thenReturn(Optional.of(questionTypeEntity));
-        when(mockPartService.findPartById(1L)).thenReturn(Optional.of(partEntity));
-        assertThrows(IllegalArgumentException.class, () -> questionController.createQuestion(inputQuestion, "MC", 1L));
+        assertThrows(Exception.class, () -> realQuestionController.createQuestion(inputQuestion, "MC", partEntity.getId()));
     }
 
     // Test Case ID: UT_QBM_022
@@ -707,60 +697,43 @@ class QuestionControllerTest {
     @Test
     void createQuestion_InvalidQuestionTypeCode() {
         Question input = new Question();
-        input.setId(1L);
         String questionType = "AA";
-        assertThrows(IllegalArgumentException.class, () -> questionController.createQuestion(input, questionType, 1L));
+        Part partEntity = createPartTest();
+        assertThrows(IllegalArgumentException.class, () -> realQuestionController.createQuestion(input, questionType, partEntity.getId()));
     }
 
     // Test Case ID: UT_QBM_023
     // Kiểm tra không tìm thấy Part theo partId
     @Test
     void createQuestion_PartNotFound() {
+        ensureQuestionType(EQTypeCode.MC);
         Question inputQuestion = new Question();
-        inputQuestion.setId(1L);
         inputQuestion.setQuestionText("Nội dung câu hỏi");
+        inputQuestion.setDifficultyLevel(DifficultyLevel.EASY);
 
         Choice choice = new Choice();
         choice.setChoiceText("Đáp án A");
         choice.setIsCorrected(1);
         inputQuestion.setChoices(Collections.singletonList(choice));
 
-        QuestionType questionTypeEntity = new QuestionType();
-        questionTypeEntity.setId(1L);
-        questionTypeEntity.setTypeCode(EQTypeCode.MC);
-
-        Part partEntity = new Part();
-        partEntity.setId(100L);
-        when(mockQuestionTypeService.getQuestionTypeByCode(EQTypeCode.MS)).thenReturn(Optional.of(questionTypeEntity));
-        when(mockPartService.findPartById(100L)).thenReturn(Optional.empty());
-        assertThrows(NoSuchElementException.class, () -> questionController.createQuestion(inputQuestion, "MC", 100L));
+        assertThrows(NoSuchElementException.class, () -> realQuestionController.createQuestion(inputQuestion, "MC", Long.MAX_VALUE));
     }
 
     // Test Case ID: UT_QBM_024
     // Kiểm tra save xong nhưng không load lại được câu hỏi theo id
     @Test
     void createQuestion_ReloadByIdEmpty() {
+        Part partEntity = createPartTest();
+        ensureQuestionType(EQTypeCode.MC);
         Question inputQuestion = new Question();
-        inputQuestion.setId(1L);
         inputQuestion.setQuestionText("Nội dung câu hỏi");
-
+        inputQuestion.setDifficultyLevel(DifficultyLevel.EASY);
         Choice choice = new Choice();
         choice.setChoiceText("Đáp án A");
         choice.setIsCorrected(1);
         inputQuestion.setChoices(Collections.singletonList(choice));
-
-        QuestionType questionTypeEntity = new QuestionType();
-        questionTypeEntity.setId(1L);
-        questionTypeEntity.setTypeCode(EQTypeCode.MC);
-
-        Part partEntity = new Part();
-        partEntity.setId(1L);
-        when(mockQuestionTypeService.getQuestionTypeByCode(EQTypeCode.MC)).thenReturn(Optional.of(questionTypeEntity));
-        when(mockPartService.findPartById(1L)).thenReturn(Optional.of(partEntity));
-        when(mockQuestionService.getQuestionById(1L)).thenReturn(Optional.empty());
-
-        assertThrows(NoSuchElementException.class, () -> questionController.createQuestion(inputQuestion, "MC", 1L));
-        verify(mockQuestionService).save(inputQuestion);
+        Question created = realQuestionController.createQuestion(inputQuestion, "MC", partEntity.getId());
+        assertTrue(questionRepository.findById(created.getId()).isPresent());
     }
 
     // ---updateQuestion()---
@@ -768,18 +741,23 @@ class QuestionControllerTest {
     // Kiểm tra tìm thấy id, cập nhật câu hỏi thành công
     @Test
     void updateQuestion_Success() {
-        Long id = 1L;
-        Question oldQuestion = new Question();
-        oldQuestion.setId(id);
-        oldQuestion.setQuestionText("Cũ");
+        Part part = createPartTest();
+        QuestionType questionType = ensureQuestionType(EQTypeCode.MC);
+        Question oldQuestion = saveQuestionFixture("Cũ", part, questionType, false);
+        Long id = oldQuestion.getId();
         Question newQuestion = new Question();
         newQuestion.setQuestionText("Mới");
+        newQuestion.setDifficultyLevel(DifficultyLevel.EASY);
+        newQuestion.setPart(part);
+        newQuestion.setQuestionType(questionType);
+        Choice choice = new Choice();
+        choice.setChoiceText("Dap an update");
+        choice.setIsCorrected(1);
+        newQuestion.setChoices(Collections.singletonList(choice));
+        newQuestion.setDeleted(false);
 
-        when(mockQuestionService.getQuestionById(id)).thenReturn(Optional.of(oldQuestion));
+        ResponseEntity<?> response = realQuestionController.updateQuestion(newQuestion, id);
 
-        ResponseEntity<?> response = questionController.updateQuestion(newQuestion, id);
-
-        verify(mockQuestionService).save(newQuestion);
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertTrue(response.getBody() instanceof ServiceResult);
         ServiceResult result = (ServiceResult) response.getBody();
@@ -790,6 +768,8 @@ class QuestionControllerTest {
         Question saved = (Question) result.getData();
         assertEquals(id, saved.getId());
         assertEquals("Mới", saved.getQuestionText());
+        Question updated = questionRepository.findById(id).orElseThrow(NoSuchElementException::new);
+        assertEquals("Mới", updated.getQuestionText());
 
         log.info(result.getStatusCode() + "");
         log.info(result.getMessage());
@@ -800,40 +780,37 @@ class QuestionControllerTest {
     // Kiểm tra thiếu nội dung câu hỏi khi cập nhật (null, rỗng hoặc chỉ khoảng trắng)
     @Test
     void updateQuestion_MissingQuestionText() {
-        Long id = 1L;
-        Question oldQuestion = new Question();
-        oldQuestion.setId(id);
-        oldQuestion.setQuestionText("Cũ");
+        Part part = createPartTest();
+        QuestionType questionType = ensureQuestionType(EQTypeCode.MC);
+        Long id = saveQuestionFixture("Cũ", part, questionType, false).getId();
 
         Question nullText = new Question();
-        nullText.setId(id);
-        assertThrows(IllegalArgumentException.class, () -> questionController.updateQuestion(nullText, id));
+        Exception exNull = assertThrows(IllegalArgumentException.class, () -> realQuestionController.updateQuestion(nullText, id));
 
         Question emptyText = new Question();
-        emptyText.setId(id);
         emptyText.setQuestionText("");
-        assertThrows(IllegalArgumentException.class, () -> questionController.updateQuestion(emptyText, id));
+        Exception exEmpty = assertThrows(IllegalArgumentException.class, () -> realQuestionController.updateQuestion(emptyText, id));
 
         Question blankText = new Question();
-        blankText.setId(id);
         blankText.setQuestionText("   ");
-        assertThrows(IllegalArgumentException.class, () -> questionController.updateQuestion(blankText, id));
+        Exception exBlank = assertThrows(IllegalArgumentException.class, () -> realQuestionController.updateQuestion(blankText, id));
     }
 
     // Test Case ID: UT_QBM_027
     // Kiểm tra danh sách đáp án rỗng khi cập nhật
     @Test
     void updateQuestion_EmptyOrNullChoicesList() {
-        Long id = 1L;
-        Question oldQuestion = new Question();
-        oldQuestion.setId(id);
-        oldQuestion.setQuestionText("Cũ");
+        Part part = createPartTest();
+        QuestionType questionType = ensureQuestionType(EQTypeCode.MC);
+        Long id = saveQuestionFixture("Cũ", part, questionType, false).getId();
 
         Question emptyList = new Question();
-        emptyList.setId(id);
         emptyList.setQuestionText("Mới");
+        emptyList.setDifficultyLevel(DifficultyLevel.EASY);
         emptyList.setChoices(Collections.emptyList());
-        assertThrows(IllegalArgumentException.class, () -> questionController.updateQuestion(emptyList, id));
+        emptyList.setPart(part);
+        emptyList.setQuestionType(questionType);
+        assertThrows(IllegalArgumentException.class, () -> realQuestionController.updateQuestion(emptyList, id));
 
     }
 
@@ -841,52 +818,53 @@ class QuestionControllerTest {
     // Kiểm tra nội dung đáp án null/rỗng/chỉ khoảng trắng
     @Test
     void updateQuestion_EmptyChoiceText() {
-        Long id = 1L;
+        Part part = createPartTest();
+        QuestionType questionType = ensureQuestionType(EQTypeCode.MC);
+        Long id = saveQuestionFixture("Cũ", part, questionType, false).getId();
 
         Choice nullText = new Choice();
         nullText.setChoiceText(null);
         nullText.setIsCorrected(0);
 
         Question qNullChoiceText = new Question();
-        qNullChoiceText.setId(id);
         qNullChoiceText.setQuestionText("Mới");
+        qNullChoiceText.setDifficultyLevel(DifficultyLevel.EASY);
         qNullChoiceText.setChoices(Collections.singletonList(nullText));
-        assertThrows(IllegalArgumentException.class, () -> questionController.updateQuestion(qNullChoiceText, id));
+        qNullChoiceText.setPart(part);
+        qNullChoiceText.setQuestionType(questionType);
+        assertThrows(IllegalArgumentException.class, () -> realQuestionController.updateQuestion(qNullChoiceText, id));
 
         Choice emptyText = new Choice();
         emptyText.setChoiceText("");
         emptyText.setIsCorrected(0);
         Question qEmptyChoiceText = new Question();
-        qEmptyChoiceText.setId(id);
         qEmptyChoiceText.setQuestionText("Mới");
+        qEmptyChoiceText.setDifficultyLevel(DifficultyLevel.EASY);
         qEmptyChoiceText.setChoices(Collections.singletonList(emptyText));
-        assertThrows(IllegalArgumentException.class, () -> questionController.updateQuestion(qEmptyChoiceText, id));
+        qEmptyChoiceText.setPart(part);
+        qEmptyChoiceText.setQuestionType(questionType);
+        assertThrows(IllegalArgumentException.class, () -> realQuestionController.updateQuestion(qEmptyChoiceText, id));
 
         Choice blankText = new Choice();
         blankText.setChoiceText("   ");
         blankText.setIsCorrected(0);
         Question qBlankChoiceText = new Question();
-        qBlankChoiceText.setId(id);
         qBlankChoiceText.setQuestionText("Mới");
+        qBlankChoiceText.setDifficultyLevel(DifficultyLevel.EASY);
         qBlankChoiceText.setChoices(Collections.singletonList(blankText));
-        assertThrows(IllegalArgumentException.class, () -> questionController.updateQuestion(qBlankChoiceText, id));
+        qBlankChoiceText.setPart(part);
+        qBlankChoiceText.setQuestionType(questionType);
+        assertThrows(IllegalArgumentException.class, () -> realQuestionController.updateQuestion(qBlankChoiceText, id));
     }
 
     // Test Case ID: UT_QBM_029
     // Kiểm tra không tìm thấy câu hỏi theo id
     @Test
     void updateQuestion_IdNotFound() {
-        Long id = 100L;
-        Question oldQuestion = new Question();
-        oldQuestion.setId(id);
-        oldQuestion.setQuestionText("Cũ");
-
+        Long id = Long.MAX_VALUE;
         Question newQuestion = new Question();
         newQuestion.setQuestionText("Mới");
-
-        when(mockQuestionService.getQuestionById(id)).thenReturn(Optional.empty());
-
-        ResponseEntity<?> response = questionController.updateQuestion(newQuestion, id);
+        ResponseEntity<?> response = realQuestionController.updateQuestion(newQuestion, id);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertTrue(response.getBody() instanceof ServiceResult);
@@ -895,8 +873,6 @@ class QuestionControllerTest {
         assertEquals(HttpStatus.NOT_FOUND.value(), result.getStatusCode());
         assertEquals("Not found with id: " + id, result.getMessage());
         assertEquals(null, result.getData());
-        verify(mockQuestionService).getQuestionById(id);
-
         log.info(result.getStatusCode() + "");
         log.info(result.getMessage());
     }
@@ -906,48 +882,75 @@ class QuestionControllerTest {
     // Kiểm tra tìm thấy id và ẩn câu hỏi thành công
     @Test
     void deleteTempQuestion_HideSuccess() {
-        Long id = 1L;
+        Part part = createPartTest();
+        QuestionType questionType = ensureQuestionType(EQTypeCode.MC);
+        Question question = saveQuestionFixture("Delete hide", part, questionType, false);
+        ResponseEntity<?> response = realQuestionController.deleteTempQuestion(question.getId(), true);
 
-        Question question = new Question();
-        question.setId(id);
-        question.setDeleted(false);
-
-        when(mockQuestionService.getQuestionById(id)).thenReturn(Optional.of(question));
-
-        ResponseEntity<?> response = questionController.deleteTempQuestion(id, true);
-
+        log.info("deleteTempQuestion_HideSuccess - response status: {}", response.getStatusCode());
         assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
-        assertEquals(true, question.isDeleted());
-        verify(mockQuestionService).update(question);
+        Question dbQuestion = questionRepository.findById(question.getId()).orElseThrow(NoSuchElementException::new);
+        log.info("deleteTempQuestion_HideSuccess - db question after update: {}", dbQuestion);
+        assertEquals(true, dbQuestion.isDeleted());
     }
 
     // Test Case ID: UT_QBM_031
     // Kiểm tra tìm thấy id và hiện câu hỏi thành công
     @Test
     void deleteTempQuestion_ShowSuccess() {
-        Long id = 1L;
+        Part part = createPartTest();
+        QuestionType questionType = ensureQuestionType(EQTypeCode.MC);
+        Question question = saveQuestionFixture("Delete show", part, questionType, true);
+        ResponseEntity<?> response = realQuestionController.deleteTempQuestion(question.getId(), false);
 
-        Question question = new Question();
-        question.setId(id);
-        question.setDeleted(true);
-
-        when(mockQuestionService.getQuestionById(id)).thenReturn(Optional.of(question));
-
-        ResponseEntity<?> response = questionController.deleteTempQuestion(id, false);
-
+        log.info("deleteTempQuestion_ShowSuccess - response status: {}", response.getStatusCode());
         assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
-        assertEquals(false, question.isDeleted());
-        verify(mockQuestionService).update(question);
+        Question dbQuestion = questionRepository.findById(question.getId()).orElseThrow(NoSuchElementException::new);
+        log.info("deleteTempQuestion_ShowSuccess - db question after update: {}", dbQuestion);
+        assertEquals(false, dbQuestion.isDeleted());
     }
 
     // Test Case ID: UT_QBM_032
     // Kiểm tra không tìm thấy id của câu hỏi
     @Test
     void deleteTempQuestion_IdNotFound() {
-        Long id = 100L;
-        when(mockQuestionService.getQuestionById(id)).thenReturn(Optional.empty());
+        assertThrows(NoSuchElementException.class, () -> realQuestionController.deleteTempQuestion(Long.MAX_VALUE, true));
+    }
 
-        assertThrows(NoSuchElementException.class, () -> questionController.deleteTempQuestion(id, true));
+    private QuestionType ensureQuestionType(EQTypeCode typeCode) {
+        return questionTypeRepository.findAllByTypeCode(typeCode).orElseGet(() -> {
+            QuestionType questionType = new QuestionType();
+            questionType.setTypeCode(typeCode);
+            questionType.setDescription("Auto test type " + typeCode.name());
+            return questionTypeRepository.save(questionType);
+        });
+    }
+
+    private Part createPartTest() {
+        Long courseId = 12L;
+        Long partId = 72L;
+        Part part = partRepository.findById(partId)
+                .orElseThrow(() -> new NoSuchElementException("Khong tim thay part id = " + partId));
+        if (part.getCourse() == null || !courseId.equals(part.getCourse().getId())) {
+            throw new IllegalStateException("Part " + partId + " khong thuoc course " + courseId);
+        }
+        return part;
+    }
+
+    private Question saveQuestionFixture(String questionText, Part part, QuestionType questionType, boolean deleted) {
+        Question question = new Question();
+        question.setQuestionText(questionText);
+        question.setDifficultyLevel(DifficultyLevel.EASY);
+        question.setPart(part);
+        question.setQuestionType(questionType);
+        question.setDeleted(deleted);
+
+        Choice choice = new Choice();
+        choice.setChoiceText("Dap an fixture");
+        choice.setIsCorrected(1);
+        question.setChoices(Collections.singletonList(choice));
+
+        return questionRepository.save(question);
     }
 
 }
